@@ -368,7 +368,26 @@ hook.Add("Sym:RegisterTests", "sym:sh_types.lua", function ()
 	end)
 
 	inst:AddTest("Metamethods", function ()
-		return "TODO"
+		local t = Type.Register("TestType")
+		function t.Meta:__tostring()
+			return "TO_STRING_TEST"
+		end
+
+		local t2 = Type.Register("TestType2", t)
+		local t3 = Type.Register("TestType3")
+
+		local i = Type.New(t)
+		Test.Equals(tostring(i), "TO_STRING_TEST")
+		
+		local i2 = Type.New(t2)
+		Test.Equals(tostring(i2), "TO_STRING_TEST")
+
+		local i3 = Type.New(t3)
+		Test.Equals(tostring(i3), "TestType3[" .. i3:GetId() .. "]")
+
+		Type.Types["TestType"] = nil
+		Type.Types["TestType2"] = nil
+		Type.Types["TestType3"] = nil
 	end)
 
 	inst:AddTest("GetId", function ()
