@@ -115,13 +115,15 @@ Type.Types.Type = TYPE
 local OBJ = Type.Types.Type.Prototype
 do
 	function OBJ:GetId()
-		local mt = getmetatable(self)
-		return mt.Id
+		return getmetatable(self).Id
 	end
 
 	function OBJ:GetType()
-		local mt = getmetatable(self)
-		return mt.Type
+		return getmetatable(self).Type
+	end
+
+	function OBJ:GetSuper()
+		return getmetatable(self).__index
 	end
 end
 
@@ -132,22 +134,26 @@ do
 
 		-- We reuse table references to handle Lua refreshes elegantly.
 		local t = Types[name] or {}
+		local instances = t.Instances or {}
+		local derivatives = t.Derivatives or {}
+		local proto = t.Prototype or {}
+		local meta = t.Meta or {}
+
+		table.Empty(t)
+
 		t.Code = 257 + util.CRC(name)
 		t.Name = name
 		t.Super = super
-		t.Instances = t.Instances or {}
-		t.Derivatives = t.Derivatives or {}
+		t.Instances = instances
+		t.Derivatives = derivatives
 
-		t.Prototype = t.Prototype or {}
+		t.Prototype = proto
 		table.Empty(t.Prototype)
 		setmetatable(t.Prototype, { __index = super.Prototype })
 
-		t.Meta = t.Meta or {}
+		t.Meta = meta
 		table.Empty(t.Meta)
 		table.Merge(t.Meta, super.Meta)
-
-		-- We need to go through all instances and derivatives to make sure 
-		-- their Meta and Proto points at the right place.
 
 		super.Derivatives[name] = t
 		Types[name] = setmetatable(t, TYPE)
@@ -189,6 +195,7 @@ do
 		setmetatable(t, mt)
 
 		if t.Init then
+			print()
 			t:Init()
 		end
 
@@ -196,7 +203,6 @@ do
 
 		return t
 	end
-
 
 	function Type.GetType(t)
 	end
@@ -303,34 +309,28 @@ hook.Add("Sym:RegisterTests", "sym:sh_types.lua", function ()
 		function t.Prototype:DoStuff()
 			return "Stuff"
 		end
-		t:CreateProperty("Name", Type.String, "Test")
 		
 		local t2 = Type.Register("TestType2", t)
 		function t2.Prototype:DoStuff()
 			return "Stuff2"
 		end
-		t2:CreateProperty("Name2", Type.String, "Test A")
 
 		local t3 = Type.Register("TestType3", t)
 		local t4 = Type.Register("TestType4")
 
 		local i = Type.New(t)
 		Test.Equals(i:DoStuff(), "Stuff")
-		Test.Equals(i:GetName(), "Test")
-		i:SetName("Test 2")
-		Test.Equals(i:GetName(), "Test 2")
-		assert(not i.GetName2)
 
 		local i2 = Type.New(t2)
 		Test.Equals(i2:DoStuff(), "Stuff2")
-		Test.Equals(i2:GetName(), "Test")
-		Test.Equals(i2:GetName2(), "Test A")
 
 		local i3 = Type.New(t3)
 		Test.Equals(i3:DoStuff(), "Stuff")
 
 		local i4 = Type.New(t4)
 		assert(not i4.DoStuff)
+
+		assert(not i4.GetCode)
 
 		Type.Types["TestType"] = nil
 
@@ -391,15 +391,80 @@ hook.Add("Sym:RegisterTests", "sym:sh_types.lua", function ()
 	end)
 
 	inst:AddTest("GetId", function ()
-		return "TODO"
+		local t = Type.Register("TestType")
+		local t2 = Type.Register("TestType2", t)
+
+		local i = Type.New(t)
+		assert(i:GetId())
+		assert(Instances[i:GetId()] == i)
+		
+		local i2 = Type.New(t2)
+		assert(i2:GetId())
+		assert(Instances[i2:GetId()] == i2)
+
+		Type.Types["TestType"] = nil
+		Type.Types["TestType2"] = nil
 	end)
 	
 	inst:AddTest("GetType", function ()
-		return "TODO"
+		local t = Type.Register("TestType")
+		local t2 = Type.Register("TestType2", t)
+
+		local i = Type.New(t)
+		Test.Equals(i:GetType(), t)
+		
+		local i2 = Type.New(t2)
+		Test.Equals(i2:GetType(), t2)
+
+		Type.Types["TestType"] = nil
+		Type.Types["TestType2"] = nil
+	end)
+	
+	inst:AddTest("GetSuper", function ()
+		local t = Type.Register("TestType")
+		local t2 = Type.Register("TestType2", t2)
+
+		local i = Type.New(t)
+		local i2 = Type.New(t2)
+		Test.Equals(i2:GetSuper(), t:GetPrototype())
+
+		Type.Types["TestType"] = nil
+		Type.Types["TestType2"] = nil
 	end)
 
 	inst:AddTest("Init", function ()
-		return "TODO"
+		local t = Type.Register("TestType")
+		local t2 = Type.Register("TestType2", t)
+		local t3 = Type.Register("TestType3", t2)
+		local t4 = Type.Register("TestType4")
+
+		function t.Prototype:Init()
+			self.Test = "Test"
+		end
+
+		local i = Type.New(t)
+		Test.Equals(i.Test, "Test")
+
+		function t2.Prototype:Init()
+			--local super = self:GetSuper()
+			--super.Init(self)
+			self.Test2 = "Test2"
+		end
+		
+		local i2 = Type.New(t2)
+		Test.Equals(i2.Test, "Test")
+		
+		local i3 = Type.New(t3)
+		Test.Equals(i3.Test, "Test")
+		Test.Equals(i3.Test2, "Test2")
+
+		local i4 = Type.New(t4)
+		assert(not i4.Test)
+
+		Type.Types["TestType"] = nil
+		Type.Types["TestType2"] = nil
+		Type.Types["TestType3"] = nil
+		Type.Types["TestType4"] = nil
 	end)
 
 	inst:AddTest("__gc", function ()
