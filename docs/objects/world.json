@@ -1,0 +1,15 @@
+{
+    "title": "Title of the location",
+    "type": "system|planet|moon|city|poi",
+    "parent": "uuid-of-parent",
+    
+    "map": "map_name",
+    "entities": [
+        {
+            "class": "sym_npc",
+            "x": 0.0,
+            "y": 0.0,
+            "characterId": ""
+        }
+    ]
+}

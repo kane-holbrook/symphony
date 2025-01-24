@@ -1,0 +1,28 @@
+# Phase 1: Foundation
+- UI
+  - Flex
+    - Padding
+    - Tidy up
+  - XVGUI
+    - Fonts
+    - RegisterVGUI
+  - Components
+    - Textbox
+    - 
+- Types
+  - Inheritance
+  - Networking
+    - By PVS
+  - Databasing
+  - Parenting
+  - Common
+    - Promise
+    - Proxy
+    - Events
+    - Primitives
+- Debug
+  - Console (logging)
+    - Filtering
+  - Performance Monitoring
+  - Object explorer
+  - Unit testing

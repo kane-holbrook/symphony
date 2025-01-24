@@ -1,0 +1,6 @@
+local SESSION = sym.RegisterType("Session")
+SESSION:AddProperty("Id", sym.types.long, { auto_increment = true })
+SESSION:AddProperty("Started", sym.types.datetime)
+SESSION:AddProperty("Ended", sym.types.datetime)
+SESSION:AddProperty("Map", sym.types.varchar255)
+SESSION:SetDatabaseTable("Sessions")

@@ -1,0 +1,8 @@
+"symphonylua_run print(stringex)"
+{
+	"base"		"sandbox"
+	"title"		"Symphony"
+	"author"	"Xalphox"
+	"category" 	"rp"
+	
+}
