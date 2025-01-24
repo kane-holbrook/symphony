@@ -1,5 +1,5 @@
 # What is Symphony?
-Symphony is a Garry's Mod framework for creating (primarily serious text-based roleplay) gamemodes. It has been built primarily with flexibility in mind, with the ultimate goal that the look and feel of the gamemode should be fully customizable by non-developer power users.
+Symphony is a Garry's Mod framework for creating (primarily serious text-based roleplay) gamemodes. It has been built primarily with flexibility in mind, with the ultimate goal that the look and feel of the gamemode should be fully customizable by non-developer power users...
 
 ## Goals
 Build a framework that
