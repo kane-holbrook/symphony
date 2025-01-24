@@ -1,7 +1,7 @@
 project = "Symphony"
 title = "Symphony documentation"
 description = "WIP"
-file = "."
+file = "/gamemode"
 format = "discount"
 backtick_references = false
 dir = "public"
