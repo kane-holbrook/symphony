@@ -1,4 +1,4 @@
-# Phase 1: Foundation
+# Phase 1: Foundation!
 - UI
   - Flex
     - Padding
