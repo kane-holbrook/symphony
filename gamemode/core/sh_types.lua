@@ -299,7 +299,72 @@ hook.Add("Sym:RegisterTests", "sym:sh_types.lua", function ()
 	
 
 	local inst = root:AddTest("New", function ()
+		local t = Type.Register("TestType")
+		function t.Prototype:DoStuff()
+			return "Stuff"
+		end
+		t:CreateProperty("Name", Type.String, "Test")
 		
+		local t2 = Type.Register("TestType2", t)
+		function t2.Prototype:DoStuff()
+			return "Stuff2"
+		end
+		t2:CreateProperty("Name2", Type.String, "Test A")
+
+		local t3 = Type.Register("TestType3", t)
+		local t4 = Type.Register("TestType4")
+
+		local i = Type.New(t)
+		Test.Equals(i:DoStuff(), "Stuff")
+		Test.Equals(i:GetName(), "Test")
+		i:SetName("Test 2")
+		Test.Equals(i:GetName(), "Test 2")
+		assert(not i.GetName2)
+
+		local i2 = Type.New(t2)
+		Test.Equals(i2:DoStuff(), "Stuff2")
+		Test.Equals(i2:GetName(), "Test")
+		Test.Equals(i2:GetName2(), "Test A")
+
+		local i3 = Type.New(t3)
+		Test.Equals(i3:DoStuff(), "Stuff")
+
+		local i4 = Type.New(t4)
+		assert(not i4.DoStuff)
+
+		Type.Types["TestType"] = nil
+
+	end)
+	
+	inst:AddTest("Properties", function ()
+		local t = Type.Register("TestType")
+		t:CreateProperty("Name", Type.String, "Test")
+		local t2 = Type.Register("TestType2", t)
+		t2:CreateProperty("Name2", Type.String, "Test A")
+		local t3 = Type.Register("TestType3", t2)
+		local t4 = Type.Register("TestType4")
+
+		local i = Type.New(t)
+		Test.Equals(i:GetName(), "Test")
+		i:SetName("Test 2")
+		Test.Equals(i:GetName(), "Test 2")
+		assert(not i.GetName2)
+
+		local i2 = Type.New(t2)
+		Test.Equals(i2:GetName(), "Test")
+		Test.Equals(i2:GetName2(), "Test A")
+
+		local i3 = Type.New(t3)
+		Test.Equals(i3:GetName(), "Test")
+		Test.Equals(i3:GetName2(), "Test A")
+
+		local i4 = Type.New(t4)
+		assert(not i4.GetName)
+
+		Type.Types["TestType"] = nil
+		Type.Types["TestType2"] = nil
+		Type.Types["TestType3"] = nil
+		Type.Types["TestType4"] = nil
 	end)
 
 	inst:AddTest("Metamethods", function ()
@@ -315,10 +380,6 @@ hook.Add("Sym:RegisterTests", "sym:sh_types.lua", function ()
 	end)
 
 	inst:AddTest("Init", function ()
-		return "TODO"
-	end)
-
-	inst:AddTest("Properties", function ()
 		return "TODO"
 	end)
 
