@@ -6,10 +6,10 @@ sym = sym or {}
 local Logged = {}
 function sym.log(type, content, data, time, realm)
     table.insert(Logged, { 
-        timestamp = os.date("%Y-%m-%dT%H:%M:%SZ", os.time(os.date("!*t"))), 
-        realm = realm or "CLIENT", 
-        type = type, 
-        content = content, 
+        timestamp = os.date("%Y-%m-%dT%H:%M:%SZ", os.time(os.date("!*t"))),
+        realm = realm or "CLIENT",
+        type = type,
+        content = content,
         data = data
     })
 end
@@ -41,16 +41,7 @@ MsgC(PRINT_COL, "-----------", COL_TYPE, "-----------", PRINT_NET, "------------
 
 MsgC(color_white, os.date("%X"), "|", PRINT_COL, color_white, PRINT_COL, "INFO", color_white, "|", color_white, "Framework starting\n")
 
-
-sym.log("FRAMEWORK", [[<pre>
-<span style="color: #FF8EF0;">  ____                </span><span style="color: #FFD001;">          _</span>
-<span style="color: #FF8EF0;"> / ___| _   _ _ __ _</span><span style="color: #FFD001;">__    _ __ | |_</span><span style="color: #5DF4FF;">_   ___  _ __  _   _</span>
-<span style="color: #FF8EF0;"> \___ \| | | | '_ </span><span style="color: #FFD001;">` _ \  | '_ \| </span><span style="color: #5DF4FF;">'_ \ / _ \| '_ \| | | |</span>
-<span style="color: #FF8EF0;">  ___) | |_| | |</span><span style="color: #FFD001;"> | | | |_| |_) </span><span style="color: #5DF4FF;">| | | | (_) | | | | |_| |</span>
-<span style="color: #FF8EF0;"> |____/ \__, |</span><span style="color: #FFD001;">_| |_| |_(_) ._</span><span style="color: #5DF4FF;">_/|_| |_'\___/|_| |_|\__, |</span>
-<span style="color: #FF8EF0;">        |___/            |_|</span><span style="color: #5DF4FF;">                      |___/</span>
-    </pre>]])
-sym.log("FRAMEWORK", "Framework starting.")	
+sym.log("FRAMEWORK", "Framework starting.")
 
 include("utils.lua")
 sym.Include("lib/containers.lua", sym.realms.shared)

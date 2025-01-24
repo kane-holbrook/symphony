@@ -1,7 +1,7 @@
 include("shared.lua")
 
 
-sym.http.Start()
+--[[sym.http.Start()
 
 sym.http.Hook("/", function (ply, req, resp, path)
     resp.Headers = resp.Headers or {}
@@ -12,7 +12,7 @@ end)
 
 sym.http.Hook("ping", function (ply, req, resp, path)
     return "Pong"
-end)
+end)--]]
 
 --sym.db.Connect()
 

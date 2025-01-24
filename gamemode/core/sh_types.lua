@@ -281,11 +281,25 @@ hook.Add("Sym:RegisterTests", "sym:sh_types.lua", function ()
 	end)
 
 	root:AddTest("__gc", function ()
-		return "TODO"
+		collectgarbage("collect")
+
+		local numTypes = table.Count(Type.Types)
+		local numTypesByCode = table.Count(Type.TypesByCode)
+
+		local t = Type.Register("TestType")
+
+		assert(Type.GetTypeByCode(t:GetCode()) == t)
+
+		Type.Types["TestType"] = nil
+		collectgarbage("collect")
+		
+		Test.Equals(table.Count(Type.Types), numTypes)
+		Test.Equals(table.Count(Type.TypesByCode), numTypesByCode)
 	end)
 	
 
 	local inst = root:AddTest("New", function ()
+		
 	end)
 
 	inst:AddTest("Metamethods", function ()
