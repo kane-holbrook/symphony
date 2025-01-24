@@ -4,5 +4,5 @@ description = "WIP"
 file = "gamemode"
 format = "discount"
 backtick_references = false
-dir = "public"
+dir = "docs"
 readme = "readme.md"
