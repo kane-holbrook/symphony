@@ -1,8 +1,12 @@
 AddCSLuaFile()
 
 function uuid()
-    local data = { math.Truncate(math.Rand(0, 4294967295)), math.Truncate(math.Rand(0, 4294967295)), math.Truncate(math.Rand(0, 4294967295)), math.Truncate(math.Rand(0, 4294967295))}
-    local data2 = string.format("%.8x", data[2])
-    local data3 = string.format("%.8x", data[3])
-    return string.format("%.8x-%s-%s-%s-%s%.8x", data[1], string.sub(data2, 0, 4), string.sub(data2, 5, 8), string.sub(data3, 0, 4), string.sub(data3, 5, 8), data[4])
+    -- Generate all 128 bits of the UUID as random numbers in one go
+    local data1 = math.random() * 0xFFFFFFFF
+    local data2 = math.random() * 0xFFFFFFFF
+    local data3 = math.random() * 0xFFFFFFFF
+    local data4 = math.random() * 0xFFFFFFFF
+
+    -- Format the UUID directly using a more efficient string formatting
+    return string.format("%08x-%04x-%04x-%04x-%08x%04x", data1, bit.rshift(data2, 16), bit.band(data2, 0xFFFF), bit.rshift(data3, 16), bit.band(data3, 0xFFFF), bit.rshift(data4, 16), bit.band(data4, 0xFFFF))
 end

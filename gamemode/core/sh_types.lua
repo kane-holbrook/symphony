@@ -273,7 +273,7 @@ do
 		local t = {}
 		local mt = table.Copy(type.Metamethods)
 
-		--mt.Id = uuid()
+		mt.Id = uuid()
 		mt.Type = type
 
 		local super = type:GetSuper()
@@ -313,24 +313,4 @@ Inst = Type.New(Test2)
 	4. Make sure that instances are physically empty. ✔️
 	5. Make sure that instances have a unique ID. ✔️
 	6. Make sure that instances inherit their properties from Type.Properties. ✔️
-
-	7. Add a method to remove properties from a type.
-	8. Add a method to remove instances of a type.
-	9. Add a method to check if an instance has a specific property.
-	10. Add a method to clone an instance.
-	11. Add a method to serialize and deserialize instances.
-	12. Add a method to compare two instances of the same type.
-	13. Add a method to get the ancestry of a type.
-	14. Add a method to get all derivatives of a type.
-	15. Add a method to get the number of derivatives of a type.
-	16. Add a method to get the number of properties of a type.
-	17. Add a method to get the number of instances of a type.
-	18. Add a method to get the number of properties of an instance.
-	19. Add a method to get the number of derivatives of an instance.
-	20. Add a method to get the number of properties of a type including inherited properties.
-	21. Add a method to get the number of derivatives of a type including inherited derivatives.
-	22. Add a method to get the number of instances of a type including inherited instances.
-	23. Add a method to get the number of properties of an instance including inherited properties.
-	24. Add a method to get the number of derivatives of an instance including inherited derivatives.
-	25. Add a method to get the number of instances of a type including inherited instances.
 ]]
