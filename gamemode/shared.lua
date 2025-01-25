@@ -58,7 +58,7 @@ Circles = sym.Include("lib/circles.lua", sym.realms.shared)
 
 -- core/sh_database.lua
 sym.Include("core/sh_types.lua", sym.realms.shared)
-sym.Include("core/sh_tests.lua", sym.realms.shared)
+--sym.Include("core/sh_tests.lua", sym.realms.shared)
 -- core/sh_payloads.lua?
 -- core/sh_virtual_entity.lua  --> Networking stuff
 -- core/sh_permissions.lua

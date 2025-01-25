@@ -1,29 +1,55 @@
-AddCSLuaFile()
-
 Type = Type or {}
-Type.Types = Type.Types or {}
-Type.TypesByCode = Type.TypesByCode or weaktable(false, true)
+Type.ByName = {}
+Type.ByCode = weaktable(false, true)
+Type.Instances = weaktable(false, true)
 
-Type.Instances = Type.Instances or weaktable(false, true)
-
-local Type = Type
-local Types = Type.Types
-local TypesByCode = Type.TypesByCode
-local Instances = Type.Instances
-
-local Type_MT = getmetatable(Type) or {}
-Type_MT.__index = Type.Types
-setmetatable(Type, Type_MT)
+setmetatable(Type, { __index = Type.ByName })
 
 
-local TYPE = Types.Type or {}
+local Metamethods = {
+	"__tostring",
+	"__eq",
+	"__lt",
+	"__le",
+	"__add",
+	"__sub",
+	"__mul",
+	"__div",
+	"__mod",
+	"__pow",
+	"__unm",
+	"__concat",
+	"__len",
+	"__call",
+	"__gc",
+	"__mode",
+	"__metatable",
+	"__index",
+	"__newindex",
+	"__pairs",
+	"__ipairs",
+	"__close",
+	"__name"
+}
+
+local function CopyMetamethods(from, to)
+	for k, v in pairs(Metamethods) do
+		to[v] = from[v]
+	end
+end
+
+
+-- Base Type
+local TYPE = Type.Type or {}
 do
-	-- Tested
+	TYPE.Code = 256
+	TYPE.Name = "Type"
+	TYPE.Super = nil
+
 	function TYPE:GetCode()
 		return self.Code
 	end
 
-	-- Tested
 	function TYPE:GetName()
 		return self.Name
 	end
@@ -32,532 +58,279 @@ do
 		return self.Super
 	end
 
-	-- Tested
-	function TYPE:GetInstances()
-		return self.Instances
+	function TYPE:__tostring()
+		return "Type[" .. self.Name .. "]"
 	end
 
-	function TYPE:GetDerivatives()
-		return self.Derivatives
+	TYPE.Ancestry = {}
+
+	-- Properties
+	TYPE.Properties = {}
+	TYPE.PropertiesByName = weaktable(false, true) -- Effectively a cache.
+
+	function TYPE:CreateProperty(name, type, options)
+		local prop = {
+			Name = name,
+			Type = type,
+			Options = options
+		}
+
+		self.Prototype["Set" .. name] = function(self, value)
+			local old = self[name]
+			self:Invoke("PropertyChanged", name, value, old)
+			self[name] = value
+		end
+
+		self.Prototype["Get" .. name] = function(self)
+			return self[name]
+		end
+
+		table.insert(self.Properties, prop)
+		self.PropertiesByName[name] = prop
 	end
 
+	function TYPE:GetProperties()
+		local props = tablex.ShallowCopy(self.Properties)
+		local super = self:GetSuper()
+		if super then
+			table.Merge(props, self:GetSuper():GetProperties())
+		end
+		return props
+	end
+
+	function TYPE:GetPropertiesMap()
+		local props = tablex.ShallowCopy(self.PropertiesByName)
+		local super = self:GetSuper()
+		if super then
+			table.Merge(props, self:GetSuper():GetPropertiesMap())
+		end
+		return props
+	end
+
+	-- Prototype
+	TYPE.Prototype = {}
 	function TYPE:GetPrototype()
 		return self.Prototype
 	end
 
-	-- Tested
-	function TYPE:CreateProperty(name, type, default, options)
-		self.Properties = self.Properties or {}
-		self.Properties[name] = {
-			Name = name,
-			Type = type,
-			Default = default,
-			Options = options
-		}
-
-		self.Prototype["Set" .. name] = function (i, value)
-			if type then
-				assert(Type.Is(value, type))
-			end
-
-			i[name] = value
-		end
-
-		self.Prototype["Get" .. name] = function (i)
-			return i[name] or self.Properties[name].Default
-		end
-	end
-
-	function TYPE:GetProperties()
-		return self.Properties
-	end
-
-	function TYPE:Init(obj)
-		if obj.Init then
-			print(self, obj)
-			obj:Init()
-		end
-	end
-	
-	function TYPE:Invoke(event, obj, ...)
-	end
-
-	-- Tested
-	function TYPE:__tostring()
-		return "Type[" .. self:GetName() .. "]"
-	end
-
-	TYPE.Code = 256
-	TYPE.Name = "Type"
-	TYPE.Instances = TYPE.Instances or {}
-	TYPE.Derivatives = TYPE.Derivatives or {}
-	
-	TYPE.Properties = TYPE.Properties or {}
-	table.Empty(TYPE.Properties)
-	
-	TYPE.Prototype = TYPE.Prototype or {}
-	table.Empty(TYPE.Prototype)	
-	
-	TYPE.Meta = TYPE.Meta or {}
-	table.Empty(TYPE.Meta)
-
-	TYPE.Meta.__index = TYPE.Prototype
-	function TYPE.Meta:__tostring()
+	-- Metamethods for the PROTOTYPE.
+	TYPE.Metamethods = {}
+	function TYPE.Metamethods:__tostring()
 		return self:GetType():GetName() .. "[" .. self:GetId() .. "]"
 	end
-	
-	TYPE.__index = TYPE
-	function TYPE:__tostring() 
-		return "Type[" .. self:GetName() .. "]"
+
+	TYPE.Instances = weaktable(false, true)
+	TYPE.InstanceCount = 0
+	function TYPE:GetInstances()
+		return self.Instances
 	end
 
-	TypesByCode[TYPE.Code] = TYPE
+	function TYPE:GetNumInstances()
+		return self.InstanceCount
+	end
+	
+	TYPE.Derivatives = weaktable(false, true)
+	function TYPE:GetDerivatives()
+		return self.Derivatives
+	end
 
-	setmetatable(TYPE, {
-		__tostring = function ()
-			return "Type[Type]"
-		end
-	})
+	-- Registering us
+	Type.ByName.Type = TYPE
+	Type.ByCode[TYPE.Code] = TYPE
+
+	setmetatable(TYPE, { __tostring = TYPE.__tostring })
 end
-Type.Types.Type = TYPE
 
-local OBJ = Type.Types.Type.Prototype
+local function Propagate(t, method, ...)
+	print("Propagate", t, method, ...)
+end
+
+-- Base Object
+local OBJ = TYPE.Prototype
 do
+	function OBJ:Initialize()
+		base()
+	end
+
+	-- Single threaded so this isn't a problem
+	local base__Name
+	local base__Source
+	local base__Next
+	local base__Args
+
+	function base(name, ...)
+		name = name or base__Name
+		
+		local src = base__Source
+		
+		assert(name, "base() called without a name")
+		assert(src, "base() called without a source")
+		assert(base__Next, "base() called without a next")
+
+		base__Next = base__Next:GetBase()
+
+		if not base__Next then
+			base__Name = nil
+			base__Source = nil
+			base__Args = nil
+		elseif base__Next[name] then
+			base__Next[name](src, unpack(base__Args))
+		end
+	end
+
 	function OBJ:GetId()
-		return getmetatable(self).Id
+		local mt = getmetatable(self)
+		return mt.Id
 	end
 
 	function OBJ:GetType()
-		return getmetatable(self).Type
+		local mt = getmetatable(self)
+		return mt.Type
 	end
 
-	function OBJ:GetSuper()
-		return getmetatable(self).Super
+	function OBJ:GetBase()
+		local mt = getmetatable(self)
+		return self.Base
 	end
 
 	function OBJ:Invoke(event, ...)
-		return self:GetType():Invoke(event, self, ...)
-	end
+		if self[event] then
+			base__Name = event
+			base__Source = self
+			base__Next = self
+			base__Args = {...}
 
-	function OBJ:Hook(event)
+			self[event](self, self, ...)
+			
+			base__Name = nil
+			base__Source = self
+			base__Next = nil
+			base__Args = nil
+		end
 	end
 end
 
--- Type statics
+-- Statics
 do
-	function Type.Register(name, super, persist)
-		super = super or TYPE
+	function Type.Register(name, super)
+		super = super or Type.Type
 
-		-- We reuse table references to handle Lua refreshes elegantly.
-		local t = Types[name] or {}
-		local instances = t.Instances or weaktable(false, true)
-		local derivatives = t.Derivatives or weaktable(false, true)
-		local proto = t.Prototype or {}
-		local meta = t.Meta or {}
+		local t = Type.ByName[name]
+		if not t then
+			t = {}
+			t.Code = 256 + util.CRC(name) -- This is the unique int32 code used in networking etc.
+			assert(not Type.ByCode[t.Code], "Type code collision: " .. name)
+		end
 
-		table.Empty(t)
-
-		t.Code = 257 + util.CRC(name)
 		t.Name = name
 		t.Super = super
-		t.Instances = instances
-		t.Derivatives = derivatives
-
-		t.Prototype = proto
-		table.Empty(t.Prototype)
-		setmetatable(t.Prototype, { __index = super.Prototype })
-
-		t.Meta = meta
-		table.Empty(t.Meta)
-		table.Merge(t.Meta, super.Meta)
+		t.Properties = setmetatable({}, { __index = super.Properties })
+		t.PropertiesByName = setmetatable({}, { __index = super.PropertiesByName })
+		t.Prototype = setmetatable({}, { __index = super.Prototype })
+		t.Metamethods = table.Copy(super.Metamethods)
+		t.Derivatives = {}
+		t.Instances = {}
+		t.NumInstances = 0
 
 		super.Derivatives[name] = t
-		Types[name] = setmetatable(t, TYPE)
-		TypesByCode[t.Code] = t
+		
+		-- Effectively a cache of ancestors for speeding up Type.Is
+		t.Ancestry = {}
+		for k, v in pairs(super.Ancestry) do
+			t.Ancestry[v] = true
+		end
+		t.Ancestry[super] = true
 
-		return t
-	end
+		Type.ByName[name] = t
+		Type.ByCode[t.Code] = t
 
-	function Type.GetTypes()
-		return Types
-	end
+		local mt = getmetatable(t) or {}
+		CopyMetamethods(super, mt)
+		mt.__index = super
 
-	-- Tested
-	function Type.GetTypeByName(name)
-		return Types[name]
-	end
-
-	-- Tested
-	function Type.GetTypeByCode(code)
-		return TypesByCode[code]
-	end
-
-	function Type.GetObject(uuid)
-		return Instances[uuid]
-	end
-
-	function Type.GetInstances()
-		return Instances
-	end
-
-	function Type.New(typeObject, id)
-		local t = {}
-		local mt = table.Copy(typeObject.Meta)
-		mt.Id = id or uuid()
-		mt.Type = typeObject
-		mt.Super = typeObject:GetSuper():GetPrototype()
-		mt.Hooks = {}
-		mt.__index = mt
-
-		setmetatable(mt, { __index = typeObject.Prototype })
+		-- Inherit from super type
 		setmetatable(t, mt)
 
-		if typeObject.Init then
-			typeObject:Init(t)
-		end
-
-		Instances[mt.Id] = t
-
 		return t
 	end
 
-	function Type.GetType(t)
-		local mt = istable(t) and getmetatable(t)
-		return mt and mt.Type
+	function Type.GetByName(name)
+		return Type.ByName[name]
 	end
-end
 
--- Primitives
-do
-	local PRIM = Type.Register("Primitive")
-	PRIM:CreateProperty("Value")
+	function Type.GetByCode(code)
+		return Type.ByCode[code]
+	end
 
-	Type.Primitives = Type.Primitives or {}
+	function Type.Is(obj, type)
+	end
 
-	local function AddPrimitive(id, name, dbType)
-		parent = parent or PRIM
-		
-		local t = Type.Register(name, parent)
-		Type.Primitives[id] = t
+	function Type.IsDerived(type, super)
+		return type.Ancestry[super] == true
+	end
+
+	function Type.New(type, ...)
+		local t = {}
+		local mt = table.Copy(type.Metamethods)
+
+		--mt.Id = uuid()
+		mt.Type = type
+
+		local super = type:GetSuper()
+		mt.Base = super.Prototype
+
+		mt.__index = mt -- The object should point at this metatable (so the object itself can remain clean).
+		setmetatable(mt, { __index = type.Prototype }) -- However, if keys aren't found on the MT, they should be pulled from the proto.
+		setmetatable(t, mt)
+
+		type.NumInstances = type.NumInstances + 1
+		type.Instances[type.NumInstances] = t
+
+		t:Invoke("Initialize")
 		return t
 	end
-
-	AddPrimitive(TYPE_STRING, "String", "TEXT")
-	AddPrimitive(TYPE_NUMBER, "Number", "DOUBLE")
-	AddPrimitive(TYPE_BOOL, "Boolean", "BOOLEAN")
-	AddPrimitive(TYPE_VECTOR, "Vector", "VECTOR")
-	AddPrimitive(TYPE_ANGLE, "Angle", "VECTOR")
-	AddPrimitive(TYPE_COLOR, "Color", "VECTOR")
-	AddPrimitive(TYPE_MATERIAL, "Material", "JSON")
-	AddPrimitive(TYPE_MATRIX, "Matrix", "JSON")
-	AddPrimitive(TYPE_TABLE, "Table", "JSON")
-
 end
 
--- Type checking
-do
-	function Type.Is(tgt, type)
-		return Type.GetType(t) == type
-	end
-
-	function Type.IsDerived(tgt, type)
-		local t = sym.GetType(tgt)
-		while t do
-			if t == type then
-				return true
-			end
-
-			t = t:GetSuper()
-		end
-
-		return false
-	end
-end
-
--- Primitives
-do
-	function Type.IsPrimitive(t)
-	end
-end
 
 -- Testing
-hook.Add("Sym:RegisterTests", "sym:sh_types.lua", function ()
-	local root = Test.Register("Type")
+Test = Type.Register("Test")
+Test:CreateProperty("TestProperty")
 
-	root:AddTest("Register", function ()
-		local t = Type.Register("TestType")
+function Test.Prototype:Initialize()
+end
 
-		assert(t:GetCode() > 256)
-		Test.Equals(t:GetName(), "TestType")
-		Test.Equals(t:GetSuper(), TYPE)
-		Test.Equals(tostring(t), "Type[TestType]")
+Test2 = Type.Register("Test2", Test)
+function Test2.Prototype:Initialize()
+end
 
-		local t2 = Type.Register("TestType2", t)
-		assert(t2:GetCode() > 256)
-		Test.Equals(t2:GetName(), "TestType2")
-		Test.Equals(t2:GetSuper(), t)
-		Test.Equals(tostring(t2), "Type[TestType2]")
+Inst = Type.New(Test2)
 
-		local t3 = Type.Register("TestType3", t2)
-		assert(t3:GetCode() > 256)
-		Test.Equals(t3:GetName(), "TestType3")
-		Test.Equals(t3:GetSuper(), t2)
-		Test.Equals(tostring(t3), "Type[TestType3]")
+--[[
+	TODO:
+	1. Make sure that Types inherit from one another properly. ✔️
+	2. Make sure that instances inherit from Type.Prototype ✔️
+	3. Make sure that instances inherit their metamethods from Type.Metamethods ✔️
+	4. Make sure that instances are physically empty. ✔️
+	5. Make sure that instances have a unique ID. ✔️
+	6. Make sure that instances inherit their properties from Type.Properties. ✔️
 
-		local t4 = Type.Register("TestType4", t)
-		assert(t4:GetCode() > 256)
-		Test.Equals(t4:GetName(), "TestType4")
-		Test.Equals(t4:GetSuper(), t)
-		Test.Equals(tostring(t4), "Type[TestType4]")
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-		Type.Types["TestType3"] = nil
-		Type.Types["TestType4"] = nil
-
-		return true
-	end)
-
-	root:AddTest("GetTypes", function ()
-		local t = Type.Register("TestType")
-
-		assert(Type.GetTypes()["TestType"] == t)
-	end)
-
-	root:AddTest("GetTypeByName", function ()
-		local t = Type.Register("TestType")
-
-		assert(Type.GetTypeByName("TestType") == t)
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-		Type.Types["TestType3"] = nil
-		Type.Types["TestType4"] = nil
-	end)
-
-	root:AddTest("GetTypeByCode", function ()
-		local t = Type.Register("TestType")
-
-		assert(Type.GetTypeByCode(t:GetCode()) == t)
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-		Type.Types["TestType3"] = nil
-		Type.Types["TestType4"] = nil
-	end)
-
-	root:AddTest("__gc", function ()
-		collectgarbage("collect")
-
-		local numTypes = table.Count(Type.Types)
-		local numTypesByCode = table.Count(Type.TypesByCode)
-
-		local t = Type.Register("TestType")
-
-		assert(Type.GetTypeByCode(t:GetCode()) == t)
-
-		Type.Types["TestType"] = nil
-		collectgarbage("collect")
-		
-		Test.Equals(table.Count(Type.Types), numTypes)
-		Test.Equals(table.Count(Type.TypesByCode), numTypesByCode)
-	end)
-	
-
-	local inst = root:AddTest("New", function ()
-		local t = Type.Register("TestType")
-		function t.Prototype:DoStuff()
-			return "Stuff"
-		end
-		
-		local t2 = Type.Register("TestType2", t)
-		function t2.Prototype:DoStuff()
-			return "Stuff2"
-		end
-
-		local t3 = Type.Register("TestType3", t)
-		local t4 = Type.Register("TestType4")
-
-		local i = Type.New(t)
-		Test.Equals(i:DoStuff(), "Stuff")
-
-		local i2 = Type.New(t2)
-		Test.Equals(i2:DoStuff(), "Stuff2")
-
-		local i3 = Type.New(t3)
-		Test.Equals(i3:DoStuff(), "Stuff")
-
-		local i4 = Type.New(t4)
-		assert(not i4.DoStuff)
-
-		assert(not i4.GetCode)
-
-		Type.Types["TestType"] = nil
-
-	end)
-	
-	inst:AddTest("Properties", function ()
-		local t = Type.Register("TestType")
-		t:CreateProperty("Name", Type.String, "Test")
-		local t2 = Type.Register("TestType2", t)
-		t2:CreateProperty("Name2", Type.String, "Test A")
-		local t3 = Type.Register("TestType3", t2)
-		local t4 = Type.Register("TestType4")
-
-		local i = Type.New(t)
-		Test.Equals(i:GetName(), "Test")
-		i:SetName("Test 2")
-		Test.Equals(i:GetName(), "Test 2")
-		assert(not i.GetName2)
-
-		local i2 = Type.New(t2)
-		Test.Equals(i2:GetName(), "Test")
-		Test.Equals(i2:GetName2(), "Test A")
-
-		local i3 = Type.New(t3)
-		Test.Equals(i3:GetName(), "Test")
-		Test.Equals(i3:GetName2(), "Test A")
-
-		local i4 = Type.New(t4)
-		assert(not i4.GetName)
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-		Type.Types["TestType3"] = nil
-		Type.Types["TestType4"] = nil
-	end)
-
-	inst:AddTest("Metamethods", function ()
-		local t = Type.Register("TestType")
-		function t.Meta:__tostring()
-			return "TO_STRING_TEST"
-		end
-
-		local t2 = Type.Register("TestType2", t)
-		local t3 = Type.Register("TestType3")
-
-		local i = Type.New(t)
-		Test.Equals(tostring(i), "TO_STRING_TEST")
-		
-		local i2 = Type.New(t2)
-		Test.Equals(tostring(i2), "TO_STRING_TEST")
-
-		local i3 = Type.New(t3)
-		Test.Equals(tostring(i3), "TestType3[" .. i3:GetId() .. "]")
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-		Type.Types["TestType3"] = nil
-	end)
-
-	inst:AddTest("GetId", function ()
-		local t = Type.Register("TestType")
-		local t2 = Type.Register("TestType2", t)
-
-		local i = Type.New(t)
-		assert(i:GetId())
-		assert(Instances[i:GetId()] == i)
-		
-		local i2 = Type.New(t2)
-		assert(i2:GetId())
-		assert(Instances[i2:GetId()] == i2)
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-	end)
-	
-	inst:AddTest("GetType", function ()
-		local t = Type.Register("TestType")
-		local t2 = Type.Register("TestType2", t)
-
-		local i = Type.New(t)
-		Test.Equals(i:GetType(), t)
-		
-		local i2 = Type.New(t2)
-		Test.Equals(i2:GetType(), t2)
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-	end)
-	
-	inst:AddTest("GetSuper", function ()
-		local t = Type.Register("TestType")
-		local t2 = Type.Register("TestType2", t)
-
-		local i2 = Type.New(t2)
-		Test.Equals(i2:GetSuper(), t:GetPrototype())
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-	end)
-
-	inst:AddTest("Init", function ()
-		local t = Type.Register("TestType")
-		local t2 = Type.Register("TestType2", t)
-		local t3 = Type.Register("TestType3", t2)
-		local t4 = Type.Register("TestType4")
-
-		function t.Prototype:Init()
-			self.Test = "Test"
-		end
-
-		local i = Type.New(t)
-		Test.Equals(i.Test, "Test")
-
-		function t2.Prototype:Init()
-			local super = self:GetSuper()
-			super.Init()
-			--self.Test2 = "Test2"
-		end
-		
-		local i2 = Type.New(t2)
-		Test.Equals(i2.Test, "Test")
-		
-		local i3 = Type.New(t3)
-		Test.Equals(i3.Test, "Test")
-		Test.Equals(i3.Test2, "Test2")
-
-		local i4 = Type.New(t4)
-		assert(not i4.Test)
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-		Type.Types["TestType3"] = nil
-		Type.Types["TestType4"] = nil
-	end)
-
-	inst:AddTest("__gc", function ()
-		return "TODO"
-	end)
-
-	root:AddTest("Refreshes", function ()
-		local t = Type.Register("TestType")
-
-		assert(Type.GetTypeByCode(t:GetCode()) == t)
-
-		Type.Types["TestType"] = nil
-		Type.Types["TestType2"] = nil
-		Type.Types["TestType3"] = nil
-		Type.Types["TestType4"] = nil
-	end)
-	
-	
-	-- Registration X
-	-- Instantiation X
-	-- Properties X
-	-- Metamethods X
-	-- Inheritance X
-	-- Performance
-	-- Garbage collection X
-	-- Lua Refreshes X
-	-- Primitives
-	-- Encoding/decoding
-	-- Networking
-	-- Database
-	-- Parenting
-	  -- Entity
-	  -- Type
-	-- Events and lifecycles
-end)
-
-_G.new = Type.New
+	7. Add a method to remove properties from a type.
+	8. Add a method to remove instances of a type.
+	9. Add a method to check if an instance has a specific property.
+	10. Add a method to clone an instance.
+	11. Add a method to serialize and deserialize instances.
+	12. Add a method to compare two instances of the same type.
+	13. Add a method to get the ancestry of a type.
+	14. Add a method to get all derivatives of a type.
+	15. Add a method to get the number of derivatives of a type.
+	16. Add a method to get the number of properties of a type.
+	17. Add a method to get the number of instances of a type.
+	18. Add a method to get the number of properties of an instance.
+	19. Add a method to get the number of derivatives of an instance.
+	20. Add a method to get the number of properties of a type including inherited properties.
+	21. Add a method to get the number of derivatives of a type including inherited derivatives.
+	22. Add a method to get the number of instances of a type including inherited instances.
+	23. Add a method to get the number of properties of an instance including inherited properties.
+	24. Add a method to get the number of derivatives of an instance including inherited derivatives.
+	25. Add a method to get the number of instances of a type including inherited instances.
+]]
