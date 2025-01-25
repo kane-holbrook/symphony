@@ -57,7 +57,7 @@ do
 
 		self.Prototype["Set" .. name] = function (i, value)
 			if type then
-				assert(sym.IsType(value, type))
+				assert(Type.Is(value, type))
 			end
 
 			i[name] = value
@@ -72,9 +72,18 @@ do
 		return self.Properties
 	end
 
+	function TYPE:Init(obj)
+		if obj.Init then
+			print(self, obj)
+			obj:Init()
+		end
+	end
+	
+	function TYPE:Invoke(event, obj, ...)
+	end
+
 	-- Tested
 	function TYPE:__tostring()
-		print(getmetatable(self))
 		return "Type[" .. self:GetName() .. "]"
 	end
 
@@ -123,7 +132,14 @@ do
 	end
 
 	function OBJ:GetSuper()
-		return getmetatable(self).__index
+		return getmetatable(self).Super
+	end
+
+	function OBJ:Invoke(event, ...)
+		return self:GetType():Invoke(event, self, ...)
+	end
+
+	function OBJ:Hook(event)
 	end
 end
 
@@ -134,8 +150,8 @@ do
 
 		-- We reuse table references to handle Lua refreshes elegantly.
 		local t = Types[name] or {}
-		local instances = t.Instances or {}
-		local derivatives = t.Derivatives or {}
+		local instances = t.Instances or weaktable(false, true)
+		local derivatives = t.Derivatives or weaktable(false, true)
 		local proto = t.Prototype or {}
 		local meta = t.Meta or {}
 
@@ -184,19 +200,20 @@ do
 		return Instances
 	end
 
-	function Type.New(type, id)
+	function Type.New(typeObject, id)
 		local t = {}
-		local mt = table.Copy(type.Meta)
+		local mt = table.Copy(typeObject.Meta)
 		mt.Id = id or uuid()
-		mt.Type = type
+		mt.Type = typeObject
+		mt.Super = typeObject:GetSuper():GetPrototype()
+		mt.Hooks = {}
 		mt.__index = mt
 
-		setmetatable(mt, { __index = type.Prototype })
+		setmetatable(mt, { __index = typeObject.Prototype })
 		setmetatable(t, mt)
 
-		if t.Init then
-			print()
-			t:Init()
+		if typeObject.Init then
+			typeObject:Init(t)
 		end
 
 		Instances[mt.Id] = t
@@ -205,12 +222,55 @@ do
 	end
 
 	function Type.GetType(t)
+		local mt = istable(t) and getmetatable(t)
+		return mt and mt.Type
+	end
+end
+
+-- Primitives
+do
+	local PRIM = Type.Register("Primitive")
+	PRIM:CreateProperty("Value")
+
+	Type.Primitives = Type.Primitives or {}
+
+	local function AddPrimitive(id, name, dbType)
+		parent = parent or PRIM
+		
+		local t = Type.Register(name, parent)
+		Type.Primitives[id] = t
+		return t
 	end
 
+	AddPrimitive(TYPE_STRING, "String", "TEXT")
+	AddPrimitive(TYPE_NUMBER, "Number", "DOUBLE")
+	AddPrimitive(TYPE_BOOL, "Boolean", "BOOLEAN")
+	AddPrimitive(TYPE_VECTOR, "Vector", "VECTOR")
+	AddPrimitive(TYPE_ANGLE, "Angle", "VECTOR")
+	AddPrimitive(TYPE_COLOR, "Color", "VECTOR")
+	AddPrimitive(TYPE_MATERIAL, "Material", "JSON")
+	AddPrimitive(TYPE_MATRIX, "Matrix", "JSON")
+	AddPrimitive(TYPE_TABLE, "Table", "JSON")
+
+end
+
+-- Type checking
+do
 	function Type.Is(tgt, type)
+		return Type.GetType(t) == type
 	end
 
 	function Type.IsDerived(tgt, type)
+		local t = sym.GetType(tgt)
+		while t do
+			if t == type then
+				return true
+			end
+
+			t = t:GetSuper()
+		end
+
+		return false
 	end
 end
 
@@ -422,9 +482,8 @@ hook.Add("Sym:RegisterTests", "sym:sh_types.lua", function ()
 	
 	inst:AddTest("GetSuper", function ()
 		local t = Type.Register("TestType")
-		local t2 = Type.Register("TestType2", t2)
+		local t2 = Type.Register("TestType2", t)
 
-		local i = Type.New(t)
 		local i2 = Type.New(t2)
 		Test.Equals(i2:GetSuper(), t:GetPrototype())
 
@@ -446,9 +505,9 @@ hook.Add("Sym:RegisterTests", "sym:sh_types.lua", function ()
 		Test.Equals(i.Test, "Test")
 
 		function t2.Prototype:Init()
-			--local super = self:GetSuper()
-			--super.Init(self)
-			self.Test2 = "Test2"
+			local super = self:GetSuper()
+			super.Init()
+			--self.Test2 = "Test2"
 		end
 		
 		local i2 = Type.New(t2)
