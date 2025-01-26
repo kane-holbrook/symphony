@@ -49,6 +49,7 @@ function tablex.Splice(t, start, num)
     local idx = 1
     for i=start, num do
         out[idx] = t[i]
+        idx = idx + 1
     end
     return out
 end

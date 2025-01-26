@@ -1,129 +1,77 @@
-AddCSLuaFile()
-
-local EVENTRESULT = sym.RegisterType("eventresult")
-function EVENTRESULT:Init(out)
-    out.Cancelled = false
-    return out
+local EVENTRESULT = Type.Register("EventResult")
+EVENTRESULT:CreateProperty("Cancelled")
+EVENTRESULT:CreateProperty("Result")
+EVENTRESULT:CreateProperty("Data")
+EVENTRESULT:CreateProperty("Name")
+local EVENTBUS = Type.Register("EventBus")
+function EVENTBUS.Prototype:Initialize()
+    base()
 end
 
-function EVENTRESULT:WasCancelled()
-    return self.Cancelled
-end
+function EVENTBUS.Prototype:Hook(name, func, id, priority)
+    assert(name, "Must provide a name.")
+    local h = self[name]
+    if not h then
+        h = setmetatable({}, {
+            n = 0
+        })
 
-function EVENTRESULT:Cancel(reason, src)
-    self.Cancelled = true
-    self.CancelReason = reason
-    self.CancelSource = src
-end
-
-function sym.EventResult()
-    return EVENTRESULT()
-end
-
-local EVENT = sym.RegisterType("event")
-EVENT:SetTransmit(TRANSMIT_NEVER)
-
-function EVENT:Init(t)
-    return t
-end
-EVENT.__call = nil
-
-function EVENT:__printtable(indent, done, dontIgnoreMetaMethods)
-    MsgC("<Event>")
-end
-
-function EVENT:Await()
-    self.promise = self.promise or sym.promise()
-    return self.promise
-end
-
--- @overload EVENT:Hook(function:func(...), varargs:params)
--- @overload EVENT:Hook(string:uniqueId, function:func(...), varargs:params)
--- func(last, ...)
-function EVENT:Hook(uniqueId, func, idx)
-    local isn = isnumber(func)
-    if not func or isn then
-        idx = func
-        func = uniqueId
-        uniqueId = nil
-    end
-    assert(func, "event:Hook func cannot be nil")
-
-    if not self.count then
-        self.callbacks = {}
-        self.count = 1
-    else
-        self.count = self.count + 1
+        self[name] = h
     end
 
-    if not uniqueId then
-        uniqueId = self.count
+    -- If we already exist, just update ourselves
+    local t = h[id]
+    local mt = getmetatable(h)
+    if t then
+        t.Func = func
+        if priority ~= t.Priority then
+            t.Priority = priority
+            mt.Cache = nil
+        end
+        return true
     end
 
-    idx = idx or table.Count(self.callbacks)
-    self.callbacks[uniqueId] = { idx = idx, func = func }
-    self.cache = nil
+    -- Otherwise create a new item
+    id = id or uuid()
+    mt.n = mt.n + 1
+    local t = {
+        Id = id,
+        Func = func,
+        Priority = priority or mt.n
+    }
+
+    mt.Cache = nil
+    h[id] = t
+    return id
 end
 
-
--- @example
--- ```local rtn, num = myevent:Invoke(test)
--- for k, v in pairs(rtn) do
---    -- do stuff
--- end```
--- 
--- or for just the last,
--- rtn[num]
-function EVENT:Invoke(...)
-    if not self.callbacks then
-        return
+function EVENTBUS.Prototype:Unhook(name, id)
+    local h = self[name]
+    if h then
+        h[id] = nil
+        local mt = getmetatable(h)
+        mt.n = mt.n - 1
+        mt.Cache = nil
     end
-
-    local cache = self.cache
-    if not cache then
-        cache = table.ClearKeys(self.callbacks)
-        table.SortByMember(cache, "idx", true)
-        self.cache = cache
-    end
-    
-    local ev
-    local args = {...}
-    if sym.IsType(args[1], EVENTRESULT) then
-        ev = args[1]
-        args = table.Splice(args, 2)
-    else
-        ev = sym.EventResult()
-    end
-
-    local rtn = {}
-    for k, t in pairs(cache) do
-        ev[k] = t.func(ev, ...)
-    end
-
-    if self.promise then
-        self.promise:Complete(ev, ...)
-    end
-
-    return ev
 end
 
-
-function EVENT:Unhook(uniqueId)
-    assert(uniqueId, "Cannot provide nil value to event:Unhook uniqueId")
-    
-    if not self.callbacks then
-        return
+function EVENTBUS.Prototype:Run(name, ...)
+    local h = self[name]
+    if not h then return end
+    local mt = getmetatable(h)
+    if not mt.Cache then
+        mt.Cache = table.ClearKeys(h)
+        table.SortByMember(mt.Cache, "Priority", true)
     end
 
-    self.callbacks[uniqueId] = nil
-    self.cache = nil
-    return true
+    local er = Type.New(EVENTRESULT)
+    er:SetName(name)
+    er:SetData({...})
+    Event = er
+    for k, v in pairs(mt.Cache) do
+        v.Func(...)
+    end
+
+    Event = nil
+    return er
 end
-
-function sym.event()
-    return sym.CreateInstance(EVENT)
-end
-
-
-
-sym.events = {}
