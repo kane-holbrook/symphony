@@ -151,6 +151,11 @@ do
 		return self.Derivatives
 	end
 
+	TYPE.Options = {}
+	function TYPE:GetOptions()
+		return self.Options
+	end
+
 	-- Registering us
 	Type.ByName.Type = TYPE -- @test Type.Register
 	Type.ByCode[TYPE.Code] = TYPE -- @test Type.Register
@@ -247,7 +252,7 @@ end
 -- Statics
 do
 	-- @test Type.Register
-	function Type.Register(name, super)
+	function Type.Register(name, super, options)
 		super = super or Type.Type
 
 		local t = Type.ByName[name]
@@ -266,6 +271,7 @@ do
 		t.Derivatives = {}
 		t.Instances = {}
 		t.InstanceCount = 0
+		t.Options = setmetatable(options or {}, { __index = super.Options })
 
 		super.Derivatives[name] = t
 		
@@ -500,10 +506,12 @@ hook.Add("Sym:RegisterTests", "sym/sh_types.lua", function ()
 
 	local root = Test.Register("Type")
 	root:AddTest("Registration", function()
-		local t = Type.Register("TestType")
+		local t = Type.Register("TestType", nil, { Test = true })
 		Test.Equals(t:GetName(), "TestType")
 		Test.Equals(t:GetCode(), 3784073340)
 		Test.Equals(t:GetSuper(), Type.Type)
+		Test.Equals(t:GetOptions()["Test"], true)
+
 		assert(Type.ByName["TestType"] == t, "Type not registered in ByName")
 		assert(Type.ByCode[t:GetCode()] == t, "Type not registered in ByCode")
 		assert(Type.IsDerived(t, Type.Type), "Type not derived from Type")
@@ -515,7 +523,7 @@ hook.Add("Sym:RegisterTests", "sym/sh_types.lua", function ()
 	end)
 
 	root:AddTest("Instantiation", function ()
-		local t = Type.Register("Life")
+		local t = Type.Register("Life", nil, { TestOption = true })
 		t:CreateProperty("CanFly")
 
 		function t.Prototype:Fly()
@@ -523,8 +531,9 @@ hook.Add("Sym:RegisterTests", "sym/sh_types.lua", function ()
 		end
 
 		local t2 = Type.Register("Mammal", t)
+		Test.Equals(t2:GetOptions()["TestOption"], true)
 
-		local t3 = Type.Register("Human", t2)
+		local t3 = Type.Register("Human", t2, { TestOption = 32 })
 		function t3.Prototype:PlayGMod()
 			return true
 		end
@@ -532,14 +541,17 @@ hook.Add("Sym:RegisterTests", "sym/sh_types.lua", function ()
 		function t3.Metamethods:__tostring()
 			return "HUMAN"
 		end
+		Test.Equals(t3:GetOptions()["TestOption"], 32)
 
 		local t4 = Type.Register("Bird", t)
 		function t4.Prototype:Initialize()
 			base()
 			self:SetCanFly(true)
 		end
+		Test.Equals(t4:GetOptions()["TestOption"], true)
 
 		local t5 = Type.Register("Rock")
+		assert(not t5:GetOptions()["TestOption"])
 
 		local life = new(t)
 		local mammal = new(t2)
