@@ -300,6 +300,13 @@ do
 	end
 
 	function Type.Is(obj, type)
+		if not obj then
+			return false
+		end
+
+		if obj:GetType() == type then
+			return true
+		end
 	end
 
 	-- @test Type.Register
@@ -444,7 +451,16 @@ do
 	function PROXY.Metamethods:__tostring()
 		return "Proxy[" .. stringex.ToString(self.Value) .. "]"
 	end
-	
+
+	function Proxy(value)
+		local p = Type.New(PROXY)
+		p:SetValue(value)
+		return p
+	end
+
+	function IsProxy(obj)
+		return Type.Is(obj, PROXY)
+	end
 
 	local PRIMITIVE = Type.Register("Primitive", PROXY)
 	
@@ -623,11 +639,12 @@ hook.Add("Sym:RegisterTests", "sym/sh_types.lua", function ()
 	end)
 
 	root:AddTest("Proxy", function ()
-		local proxy = Type.New(Type.Proxy)
+		local proxy = Proxy(32)
 		local valueChanged = false
+		Test.Equals(proxy:GetValue(), 32)
 
 		local id = proxy:Hook(function(newValue, oldValue)
-			Test.Equals(oldValue, nil)
+			Test.Equals(oldValue, 32)
 			Test.Equals(newValue, 42)
 			valueChanged = true
 		end)
@@ -641,6 +658,8 @@ hook.Add("Sym:RegisterTests", "sym/sh_types.lua", function ()
 		
 		proxy:SetValue("Hello")
 		Test.Equals(tostring(proxy), "Proxy[\"Hello\"]")
+
+		Test.Equals(IsProxy(proxy), true)
 	end)
 end)
 
