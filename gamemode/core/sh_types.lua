@@ -317,6 +317,10 @@ do
 
 	-- @test Type.Register
 	function Type.IsDerived(type, super)
+		if not type or not type.Ancestry then
+			return false
+		end
+
 		return type.Ancestry[super] == true
 	end
 
@@ -499,6 +503,27 @@ do
 
 	local MATRIX = Type.Register("Matrix", PRIMITIVE)
 	Type.Primitives[TYPE_MATRIX] = MATRIX
+
+	function FromPrimitive(obj)
+		local t = Type.Primitives[TypeID(obj)]
+		assert(t, "Object is not a primitive.")
+		
+		local o = Type.New(t)
+		o:SetValue(obj)
+		return o
+	end
+
+	function ToPrimitive(obj)
+		assert(IsPrimitive(obj), "Object is not a primitive.")
+		return obj:GetValue()
+	end
+
+	function IsPrimitive(obj)
+		if not obj or not obj.GetType then
+			return false
+		end
+		return Type.IsDerived(obj:GetType(), PRIMITIVE)
+	end
 end
 
 -- Unit testing
@@ -672,6 +697,31 @@ hook.Add("Sym:RegisterTests", "sym/sh_types.lua", function ()
 		Test.Equals(tostring(proxy), "Proxy[\"Hello\"]")
 
 		Test.Equals(IsProxy(proxy), true)
+	end)
+
+	root:AddTest("Primitives", function ()
+		local num = Type.New(Type.Primitives[TYPE_NUMBER])
+		num:SetValue(123)
+		Test.Equals(num:GetValue(), 123)
+		Test.Equals(tostring(num), "Proxy[123]")
+
+		local str = Type.New(Type.Primitives[TYPE_STRING])
+		str:SetValue("Hello")
+		Test.Equals(str:GetValue(), "Hello")
+		Test.Equals(tostring(str), "Proxy[\"Hello\"]")
+
+		local bool = Type.New(Type.Primitives[TYPE_BOOL])
+		bool:SetValue(true)
+		Test.Equals(bool:GetValue(), true)
+		Test.Equals(tostring(bool), "Proxy[true]")
+
+		Test.Equals(IsPrimitive(num), true)
+		Test.Equals(IsPrimitive(str), true)
+		Test.Equals(IsPrimitive(bool), true)
+
+		local x = FromPrimitive(32)
+		Test.Equals(x:GetValue(), 32)
+		Test.Equals(x:GetType(), Type.Primitives[TYPE_NUMBER])
 	end)
 end)
 
