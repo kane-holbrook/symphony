@@ -306,14 +306,22 @@ do
 	end
 
 	function Type.Is(obj, type)
-		if not obj then
+		if not obj or not istable(obj) then
 			return false
 		end
 
-		if obj:GetType() == type then
+		if obj.GetType and obj:GetType() == type then
 			return true
 		end
+
+		return false
 	end
+	Is = Type.Is
+
+	function Type.IsType(obj)
+		return Type.Is(obj, TYPE)
+	end
+	IsType = Type.IsType
 
 	-- @test Type.Register
 	function Type.IsDerived(type, super)
@@ -348,6 +356,75 @@ do
 		return t
 	end
 	new = Type.New
+
+	function Type.Serialize(data, root)
+		-- Effectively this just parses data, calling encode where necessary on objects, which call this
+		-- recursively.
+
+		if not root then
+			-- If we're the root element (i.e. the first call), we need to create a root object.
+			root = {}
+			root.map = {}
+			root.items = {}
+			root.first, root.firstType = Type.Serialize(data, root)
+			return root
+		end
+
+		if Type.IsType(data) then
+			error("Not implemented")
+		else
+			local typeId = TypeID(data)
+			if typeId == TYPE_TABLE then
+
+				local e = root.map[data]
+				if root.map[data] then
+					return e, TYPE_TABLE
+				end
+
+				local t = {}
+				for k, v in pairs(data) do
+					t[k] = { Type.Serialize(v, root) }
+				end
+				
+				local id = uuid()
+				root.map[data] = id
+				root.items[id] = t
+				
+				return t, typeId
+			else
+				return data, typeId
+			end
+		end
+
+		root.map = nil
+		return root
+	end
+
+	function Type.Deserialize(data, root)
+		assert(istable(data))
+		
+		if not root then
+			root = {}
+			root.map = {}
+			root.items = data.items
+			root.first = data.first
+			root.firstType = data.firstType
+
+			return Type.Deserialize(root.first, root)
+		else
+			local typeId = data[2]
+			if typeId == TYPE_TABLE then
+				local t = {}
+				for k, v in pairs(data[1]) do
+					t[k] = Type.Deserialize(v, root)
+				end
+				return t
+			else
+				print("Data 1", data[1])
+				return data[1]
+			end
+		end
+	end
 end
 
 -- Primitives & common types
@@ -723,14 +800,23 @@ hook.Add("Sym:RegisterTests", "sym/sh_types.lua", function ()
 		Test.Equals(x:GetValue(), 32)
 		Test.Equals(x:GetType(), Type.Primitives[TYPE_NUMBER])
 	end)
-end)
 
---[[
-	TODO:
-	1. Make sure that Types inherit from one another properly. ✔️
-	2. Make sure that instances inherit from Type.Prototype ✔️
-	3. Make sure that instances inherit their metamethods from Type.Metamethods ✔️
-	4. Make sure that instances are physically empty. ✔️
-	5. Make sure that instances have a unique ID. ✔️
-	6. Make sure that instances inherit their properties from Type.Properties. ✔️
-]]
+	root:AddTest("Serialization", function ()
+
+		-- Test the primitive types first
+		Test.Equals(Type.Deserialize(Type.Serialize(32)), 32)
+		Test.Equals(Type.Deserialize(Type.Serialize("Hello")), "Hello")
+		Test.Equals(Type.Deserialize(Type.Serialize(true)), true)
+
+		-- Now test a basic table
+		local t = {
+			Hello = "World",
+			Number = 32,
+			Bool = true,
+			Table = {
+				Hello = "World"
+			}
+		}
+		PrintTable(Type.Serialize(t))
+	end)
+end)
