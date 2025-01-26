@@ -8,7 +8,7 @@ local TEST = Type.Register("UnitTest")
 TEST:CreateProperty("Name")
 TEST:CreateProperty("Func")
 
-function TEST.Prototype:Init()
+function TEST.Prototype:Initialize()
     self.Children = {}
 end
 
