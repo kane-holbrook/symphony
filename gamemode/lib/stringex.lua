@@ -104,6 +104,14 @@ function stringex.ConcatArgs(...)
     return table.concat(args, " ")
 end
 
+function stringex.ToString(t)
+    if isstring(t) then
+        return "\"" .. t .. "\""
+    else
+        return tostring(t)
+    end
+end
+
 function stringex.Merge(str, keys)
     for k, v in pairs(keys) do
         str = string.Replace(str, k, v)
