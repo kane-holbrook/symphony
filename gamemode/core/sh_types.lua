@@ -82,14 +82,12 @@ do
 			Options = options
 		}
 
-		self.Prototype["Set" .. name] = function(self, value)
-			local old = self[name]
-			self:Invoke("PropertyChanged", name, value, old)
-			self[name] = value
+		self.Prototype["Set" .. name] = function (self, value)
+			self:SetProperty(name, value)
 		end
 
-		self.Prototype["Get" .. name] = function(self)
-			return self[name]
+		self.Prototype["Get" .. name] = function (self)
+			return self:GetProperty(name)
 		end
 
 		table.insert(self.Properties, prop)
@@ -216,6 +214,16 @@ do
 		return self.Base
 	end
 
+	function OBJ:SetProperty(name, value)
+		local old = self[name]
+		self:Invoke("OnPropertyChanged", name, value, old)
+		self[name] = value
+	end
+
+	function OBJ:GetProperty(name)
+		return self[name]
+	end
+
 	-- @test Type.New
 	function OBJ:Invoke(event, ...)
 		if self[event] then
@@ -243,9 +251,15 @@ do
 		return out
 	end
 
-	function OBJ:Encode()
+	function OBJ:Serialize()
 		local out = self:GetProperties()
 		return out
+	end
+
+	function OBJ:Deserialize(data)
+		for k, v in pairs(data) do
+			self:SetProperty(k, v)
+		end
 	end
 end
 
@@ -305,41 +319,53 @@ do
 		return Type.ByCode[code]
 	end
 
-	function Type.Is(obj, type)
-		if not obj or not istable(obj) then
+	function Type.Is(obj, type)		
+		if not istable(obj) then
 			return false
 		end
 
-		if obj.GetType and obj:GetType() == type then
-			return true
+		if obj.Id then
+			obj = obj:GetType()
+		end		
+
+		if not obj.Ancestry then
+			return false
 		end
 
-		return false
+		return obj == type 
 	end
 	Is = Type.Is
 
-	function Type.IsType(obj)
-		return Type.Is(obj, TYPE)
+	function Type.IsObject(obj)
+		return Type.IsDerived(obj, TYPE)
 	end
-	IsType = Type.IsType
+	IsObject = Type.IsObject
 
 	-- @test Type.Register
-	function Type.IsDerived(type, super)
-		if not type or not type.Ancestry then
+	function Type.IsDerived(obj, super)
+		if not istable(obj) then
 			return false
 		end
 
-		return type.Ancestry[super] == true
+		if obj.Id then
+			obj = obj:GetType()
+		end
+
+		if not obj.Ancestry then
+			return false
+		end
+
+		return obj.Ancestry[super] == true
 	end
 
 	-- @test Type.New
-	function Type.New(type, ...)
+	function Type.New(type, id)
 		assert(type)
 
 		local t = {}
 		local mt = table.Copy(type.Metamethods)
 
-		mt.Id = uuid()
+		mt.Id = id or uuid()
 		mt.Type = type
 
 		local super = type:GetSuper()
@@ -352,7 +378,7 @@ do
 		type.InstanceCount = type.InstanceCount + 1
 		type.Instances[type.InstanceCount] = t
 
-		t:Invoke("Initialize", ...)
+		t:Invoke("Initialize")
 		return t
 	end
 	new = Type.New
@@ -366,43 +392,47 @@ do
 			root = {}
 			root.map = {}
 			root.items = {}
-			root.first, root.firstType = Type.Serialize(data, root)
+			root.num = 0
+			root.firstType, root.first = Type.Serialize(data, root)
+			root.map = nil
+			root.num = nil
 			return root
 		end
+		
+		local typeId = TypeID(data)
+		if typeId == TYPE_TABLE then
 
-		if Type.IsType(data) then
-			error("Not implemented")
-		else
-			local typeId = TypeID(data)
-			if typeId == TYPE_TABLE then
+			local e = root.map[data]
+			if root.map[data] then
+				return TYPE_TABLE, e
+			end
 
-				local e = root.map[data]
-				if root.map[data] then
-					return e, TYPE_TABLE
+			local t = {}
+			if Type.IsObject(data) then
+				for k, v in pairs(data:Serialize()) do
+					t[k] = { Type.Serialize(v, root) }
 				end
+				t.Id = { TYPE_STRING, data:GetId() }
 
-				local t = {}
+				typeId = data:GetType():GetCode()
+			else
 				for k, v in pairs(data) do
 					t[k] = { Type.Serialize(v, root) }
 				end
-				
-				local id = uuid()
-				root.map[data] = id
-				root.items[id] = t
-				
-				return t, typeId
-			else
-				return data, typeId
 			end
-		end
 
-		root.map = nil
-		return root
+			root.num = root.num + 1
+			local id = root.num
+			root.map[data] = id
+			root.items[id] = t
+			
+			return typeId, id
+		else
+			return typeId, data
+		end
 	end
 
-	function Type.Deserialize(data, root)
-		assert(istable(data))
-		
+	function Type.Deserialize(data, root)		
 		if not root then
 			root = {}
 			root.map = {}
@@ -410,20 +440,40 @@ do
 			root.first = data.first
 			root.firstType = data.firstType
 
-			return Type.Deserialize(root.first, root)
+			return Type.Deserialize({root.firstType, root.first}, root)
 		else
-			local typeId = data[2]
-			if typeId == TYPE_TABLE then
+			local typeId = data[1]
+			if typeId == TYPE_TABLE or typeId >= 256 then
 				local t = {}
-				for k, v in pairs(data[1]) do
+				local k = data[2]
+				local val = root.items[k]
+				
+				for k, v in pairs(val) do
 					t[k] = Type.Deserialize(v, root)
 				end
-				return t
+
+				if typeId >= 256 then
+					local id = t.Id
+					t.Id = nil
+
+					local o = Type.New(Type.GetByCode(typeId), id)
+					o:Deserialize(t)
+					return o
+				else
+					return t
+				end
 			else
-				print("Data 1", data[1])
-				return data[1]
+				return data[2]
 			end
 		end
+	end
+
+	function net.WriteObject(obj, ply)
+		net.WriteTable(Type.Serialize(obj, ply))
+	end
+
+	function net.ReadObject()
+		return Type.Deserialize(net.ReadTable())
 	end
 end
 
@@ -809,14 +859,44 @@ hook.Add("Sym:RegisterTests", "sym/sh_types.lua", function ()
 		Test.Equals(Type.Deserialize(Type.Serialize(true)), true)
 
 		-- Now test a basic table
-		local t = {
+		local r = Type.Deserialize(Type.Serialize({
 			Hello = "World",
 			Number = 32,
 			Bool = true,
 			Table = {
-				Hello = "World"
+				Hello = "World",
+				Table2 = {
+					A = 32
+				}
 			}
-		}
-		PrintTable(Type.Serialize(t))
+		}))
+		Test.Equals(r.Hello, "World")
+		Test.Equals(r.Number, 32)
+		Test.Equals(r.Bool, true)
+		Test.Equals(r.Table.Hello, "World")
+		Test.Equals(r.Table.Table2.A, 32)
+
+		local t = Type.Register("TestType")
+		t:CreateProperty("Value")
+		t:CreateProperty("Child")
+
+		local i = new(t)
+		i:SetValue(32)
+
+		local i2 = new(t)
+		i2:SetValue(40)
+		i2:SetChild(i)
+		r = Type.Deserialize(util.JSONToTable(util.TableToJSON(Type.Serialize(i2))))
+
+		
+		Test.Equals(r:GetType(), t)
+		Test.Equals(r:GetChild():GetType(), t)
+
+		Test.Equals(r:GetChild():GetValue(), 32)
+		Test.Equals(r:GetValue(), 40)
+		Test.Equals(r:GetId(), i2:GetId())
+
+		Type.ByName["TestType"] = nil
+		Type.ByCode[t:GetCode()] = nil
 	end)
 end)

@@ -70,7 +70,6 @@ if CLIENT then
                 recurse(v, 1)
             end
         end--]]
-
         local nsucc, nfail = 0, 0
         local _, _, _, result = Test.All:Run()
         
@@ -96,6 +95,7 @@ if CLIENT then
             end
         end
         recurse(result[1], 1)
+        collectgarbage("collect")
 
         MsgC("\nResults:\n  ", Color(128, 255, 128), nsucc, Color(192, 255, 192), " PASS", color_white, " | ", Color(255, 128, 128), nfail, Color(255, 192, 192), " FAIL\n")
     end)
