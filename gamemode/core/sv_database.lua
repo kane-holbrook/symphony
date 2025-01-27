@@ -1,5 +1,4 @@
-sym.db = {}
-sym.db.tables = {}
+Database = {}
 
 require("mysqloo")
 if not mysqloo then

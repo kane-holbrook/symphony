@@ -306,6 +306,8 @@ do
 		-- Inherit from super type
 		setmetatable(t, mt)
 
+		hook.Run("Type.Register", t)
+
 		return t
 	end
 
@@ -409,9 +411,16 @@ do
 			local e = root.map[data]
 			if root.map[data] then
 				return TYPE_TABLE, e
-			end
+			end		
+
 
 			local t = {}
+			
+			local id = root.num + 1
+			root.map[data] = id
+			root.items[id] = t
+			root.num = id
+
 			if Type.IsObject(data) then
 				for k, v in pairs(data:Serialize(ply)) do
 					t[k] = { Type.Serialize(v, ply, root) }
@@ -424,11 +433,7 @@ do
 					t[k] = { Type.Serialize(v, ply, root) }
 				end
 			end
-
-			root.num = root.num + 1
-			local id = root.num
-			root.map[data] = id
-			root.items[id] = t
+			
 			
 			return typeId, id
 		else
@@ -443,6 +448,7 @@ do
 			root.items = data.items
 			root.first = data.first
 			root.firstType = data.firstType
+			root.seen = {}
 
 			return Type.Deserialize({root.firstType, root.first}, root)
 		else
@@ -450,22 +456,36 @@ do
 			if typeId == TYPE_TABLE or typeId >= 256 then
 				local t = {}
 				local k = data[2]
-				local val = root.items[k]
-				
-				for k, v in pairs(val) do
-					t[k] = Type.Deserialize(v, root)
+				local seen = root.seen[k]
+				if seen then
+					return seen
 				end
 
 				if typeId >= 256 then
-					local id = t.Id
-					t.Id = nil
+
+					local val = root.items[k]
+					local id = Type.Deserialize(val["Id"], root)
+					val["Id"] = nil
 
 					local o = Type.New(Type.GetByCode(typeId), id)
+					root.seen[k] = o
+
+					for k, v in pairs(val) do
+						t[k] = Type.Deserialize(v, root)
+					end
+
 					o:Deserialize(t)
 					return o
 				else
+					root.seen[k] = t
+					
+					local val = root.items[k]
+					for k, v in pairs(val) do
+						t[k] = Type.Deserialize(v, root)
+					end
 					return t
 				end
+
 			else
 				return data[2]
 			end
@@ -482,4 +502,207 @@ do
 end
 
 
--- The tests for sh_types.lua are in sh_tests.lua.
+local TEST_NET_PROMISE
+hook.Add("Test.Register", "Types", function ()			
+	local root = Test.Register("Type")
+	root:AddTest("Registration", function()
+		local t = Type.Register("TestType", nil, { Test = true })
+		Test.Equals(t:GetName(), "TestType")
+		Test.Equals(t:GetCode(), 3784073340)
+		Test.Equals(t:GetSuper(), Type.Type)
+		Test.Equals(t:GetOptions()["Test"], true)
+
+		assert(Type.ByName["TestType"] == t, "Type not registered in ByName")
+		assert(Type.ByCode[t:GetCode()] == t, "Type not registered in ByCode")
+		assert(Type.IsDerived(t, Type.Type), "Type not derived from Type")
+		
+		local code = t:GetCode()
+		t = nil
+		Type.ByName["TestType"] = nil
+		collectgarbage("collect")
+		assert(not Type.ByCode[code], "Type not __gc'd in ByCode")
+	end)
+
+	root:AddTest("Instantiation", function ()
+		local t = Type.Register("Life", nil, { TestOption = true })
+		t:CreateProperty("CanFly")
+
+		function t.Prototype:Fly()
+			return self:GetCanFly() or false
+		end
+
+		local t2 = Type.Register("Mammal", t)
+		Test.Equals(t2:GetOptions()["TestOption"], true)
+
+		local t3 = Type.Register("Human", t2, { TestOption = 32 })
+		function t3.Prototype:PlayGMod()
+			return true
+		end
+
+		function t3.Metamethods:__tostring()
+			return "HUMAN"
+		end
+		Test.Equals(t3:GetOptions()["TestOption"], 32)
+
+		local t4 = Type.Register("Bird", t)
+		function t4.Prototype:Initialize()
+			base()
+			self:SetCanFly(true)
+		end
+		Test.Equals(t4:GetOptions()["TestOption"], true)
+
+		local t5 = Type.Register("Rock")
+		assert(not t5:GetOptions()["TestOption"])
+
+		local life = new(t)
+		local mammal = new(t2)
+		local human = new(t3)
+		local bird = new(t4)
+		local rock = new(t5)
+
+		Test.Equals(life:Fly(), false)
+		Test.Equals(mammal:Fly(), false)
+		Test.Equals(human:Fly(), false)
+		Test.Equals(bird:Fly(), true)
+		assert(rock.Fly == nil)
+
+		assert(not life.PlayGMod)
+		assert(not mammal.PlayGMod)
+		Test.Equals(human:PlayGMod(), true)
+		assert(not bird.PlayGMod)
+		assert(not rock.PlayGMod)
+
+		Test.Equals(tostring(human), "HUMAN")
+		assert(tostring(rock) ~= "HUMAN")
+		assert(tostring(mammal) ~= "HUMAN")
+		assert(tostring(life) ~= "HUMAN")
+		assert(tostring(bird) ~= "HUMAN")
+
+		Type.ByName["Life"] = nil
+		Type.ByName["Mammal"] = nil
+		Type.ByName["Human"] = nil
+		Type.ByName["Bird"] = nil
+
+		-- Check IDs and OBJ functions.
+		assert(human:GetId() ~= bird:GetId())
+		Test.Equals(human:GetType(), t3)
+		Test.Equals(bird:GetType(), t4)
+		Test.Equals(human:GetBase(), t2.Prototype)
+		Test.Equals(bird:GetBase(), t.Prototype)
+		assert(bird:GetProperties().CanFly == true)
+	end)
+
+	root:AddTest("Serialization", function ()
+
+		-- Test the primitive types first
+		Test.Equals(Type.Deserialize(Type.Serialize(32)), 32)
+		Test.Equals(Type.Deserialize(Type.Serialize("Hello")), "Hello")
+		Test.Equals(Type.Deserialize(Type.Serialize(true)), true)
+
+		-- Now test a basic table
+		local r = Type.Deserialize(Type.Serialize({
+			Hello = "World",
+			Number = 32,
+			Bool = true,
+			Table = {
+				Hello = "World",
+				Table2 = {
+					A = 32
+				}
+			}
+		}))
+		Test.Equals(r.Hello, "World")
+		Test.Equals(r.Number, 32)
+		Test.Equals(r.Bool, true)
+		Test.Equals(r.Table.Hello, "World")
+		Test.Equals(r.Table.Table2.A, 32)
+
+		local t = Type.Register("TestType")
+		t:CreateProperty("Value")
+		t:CreateProperty("Child")
+
+		local i = new(t)
+		i:SetValue(32)
+
+		local i2 = new(t)
+		i2:SetValue(40)
+		i2:SetChild(i)
+		r = Type.Deserialize(util.JSONToTable(util.TableToJSON(Type.Serialize(i2))))
+
+		
+		Test.Equals(r:GetType(), t)
+		Test.Equals(r:GetChild():GetType(), t)
+
+		Test.Equals(r:GetChild():GetValue(), 32)
+		Test.Equals(r:GetValue(), 40)
+		Test.Equals(r:GetId(), i2:GetId())
+
+		Type.ByName["TestType"] = nil
+		Type.ByCode[t:GetCode()] = nil
+	end)
+
+	root:AddTest("Database", function ()
+		error("Not implemented")
+	end)
+
+	root:AddTest("Networking", function ()
+		
+		local t = Type.Register("TEST_OBJECT", nil)
+		t:CreateProperty("Bool")
+		t:CreateProperty("Number")
+		t:CreateProperty("String")
+		t:CreateProperty("Table")
+		t:CreateProperty("Child")
+		
+		local obj = Type.New(t)
+		obj:SetBool(true)
+		obj:SetNumber(32)
+		obj:SetString("Hello")
+		obj:SetTable({ Hello = { Value = "World" } })
+		obj:SetChild(obj)
+
+		TEST_NET_PROMISE = Promise.Create()
+
+		net.Start("Types.TestNetwork")
+			net.WriteObject(obj)
+		net.SendToServer()
+
+		local r = TEST_NET_PROMISE:Await()
+
+		Test.Equals(r:GetId(), obj:GetId())
+		Test.Equals(r:GetBool(), true)
+		Test.Equals(r:GetNumber(), 32)
+		Test.Equals(r:GetString(), "Hello")
+		Test.Equals(r:GetTable().Hello.Value, "World")
+		Test.Equals(r:GetChild(), r)
+
+
+		TEST_NET_PROMISE = nil		
+		Type.ByName["TEST_OBJECT"] = nil
+		collectgarbage("collect")
+	end)
+end)
+
+if SERVER then
+	util.AddNetworkString("Types.TestNetwork")
+	net.Receive("Types.TestNetwork", function (len, ply)
+		local t = Type.Register("TEST_OBJECT", nil)
+		t:CreateProperty("Bool")
+		t:CreateProperty("Number")
+		t:CreateProperty("String")
+		t:CreateProperty("Table")
+		t:CreateProperty("Child")
+		
+		local obj = net.ReadObject()
+		net.Start("Types.TestNetwork")
+			net.WriteObject(obj)
+		net.Send(ply)
+
+		Type.ByName["Life"] = nil
+		collectgarbage("collect")
+	end)
+else
+	net.Receive("Types.TestNetwork", function (len)
+		TEST_NET_PROMISE:Complete(net.ReadObject())
+	end)
+end

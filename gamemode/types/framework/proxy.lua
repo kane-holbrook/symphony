@@ -35,3 +35,30 @@ end
 function IsProxy(obj)
     return Type.IsDerived(obj, PROXY)
 end
+
+
+hook.Add("Test.Register", "Proxies", function ()
+    Test.Register("Proxies", function ()
+        local proxy = Proxy(32)
+        local valueChanged = false
+        Test.Equals(proxy:GetValue(), 32)
+
+        local id = proxy:Hook(function(newValue, oldValue)
+            Test.Equals(oldValue, 32)
+            Test.Equals(newValue, 42)
+            valueChanged = true
+        end)
+
+        proxy:SetValue(42)
+        Test.Equals(proxy:GetValue(), 42)
+        Test.Equals(valueChanged, true)
+        Test.Equals(tostring(proxy), "Proxy[42]")
+
+        proxy:Unhook(id)
+        
+        proxy:SetValue("Hello")
+        Test.Equals(tostring(proxy), "Proxy[\"Hello\"]")
+
+        Test.Equals(IsProxy(proxy), true)
+    end)
+end)

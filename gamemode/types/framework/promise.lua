@@ -27,7 +27,12 @@ do
     -- @test sh_tests/Promises
     function PROMISE.Prototype:SetFunc(func)
         self.func = func
-        self.thread = coroutine.create(func)
+
+        if func then
+            self.thread = coroutine.create(func)
+        else
+            self.thread = nil
+        end
     end
 
     -- @test sh_tests/Promises
@@ -167,3 +172,125 @@ end
 function ispromise(obj)
     return Type.IsDerived(obj, Type.Promise)
 end
+
+
+
+hook.Add("Test.Register", "Promises", function ()
+    Test.Register("Promises", function ()
+        local p
+        local p2 
+		local succ, a, b, c
+		local hookSucc
+		local startPromiseNum = table.Count(Promise.GetPromises())
+		
+		-- Asynchronous - happy path
+        p = Promise.Create(function ()
+            Promise.Sleep(0) -- Sleep for 1 tick   
+			Test.Equals(tostring(p), "Promise[" .. p:GetId() .. "](running)")
+            return 32, 64, 128
+        end)
+
+		Test.Equals(ispromise(p), true)
+		Test.Equals(ispromise(root), false)
+		Test.Equals(ispromise(32), false)
+		assert(Promise.GetPromises()[p])
+		Test.Equals(tostring(p), "Promise[" .. p:GetId() .. "](suspended)")
+
+        p2 = Promise.Create(function ()
+            p:Start()
+            local succ, a, b, c = p:Await()
+			Test.Equals(succ, true)
+			Test.Equals(Promise.Current, p2)
+
+			return a, b, c
+        end)
+
+		hookSucc = false
+		p2:Hook(function(succ, a, b, c)
+			Test.Equals(succ, true)
+			Test.Equals(a, 32)
+			Test.Equals(b, 64)
+			Test.Equals(c, 128)
+			hookSucc = true
+		end)
+		
+		p2:Start()
+		succ, a, b, c = p2:Await()
+		Test.Equals(hookSucc, true)
+		Test.Equals(p2:IsComplete(), true)
+		Test.Equals(p2:GetError(), nil)
+		Test.Equals(tostring(p), "Promise[" .. p:GetId() .. "](dead)")
+		
+		Test.Equals(succ, true)
+		Test.Equals(a, 32)
+		Test.Equals(b, 64)
+		Test.Equals(c, 128)
+
+		
+		-- Asynchronous - error path
+		p = Promise.Create(function()
+			Promise.Sleep(0) -- Sleep for 1 tick   
+			error("Test error")
+			return 32, 64, 128
+		end)
+
+		p2 = Promise.Create(function()
+			p:Start()
+			local succ, a, b, c = p:Await()
+			Test.Equals(succ, false)
+			error(a)
+			return a, b, c
+		end)
+
+		p2:Start()
+		succ, a, b, c = p2:Await()
+		Test.Equals(succ, false)
+
+		-- Synchronous - happy path
+        p = Promise.Create(function ()
+            return 32, 64, 128
+        end)
+
+        p2 = Promise.Create(function ()
+            p:Start()
+            local succ, a, b, c = p:Await()
+			Test.Equals(succ, true)
+
+			return a, b, c
+        end)
+		
+		p2:Start()
+		succ, a, b, c = p2:Await()
+		
+		Test.Equals(succ, true)
+		Test.Equals(a, 32)
+		Test.Equals(b, 64)
+		Test.Equals(c, 128)
+		
+		-- Synchronous - error path
+		p = Promise.Create(function()
+			error("Test error")
+			return 32, 64, 128
+		end)
+
+		p2 = Promise.Create(function()
+			p:Start()
+			local succ, a, b, c = p:Await()
+			Test.Equals(succ, false)
+			error(a)
+			return a, b, c
+		end)
+
+		p2:Start()
+		succ, a, b, c = p2:Await()
+		Test.Equals(succ, false)
+
+
+		p = nil
+		p2 = nil
+
+		-- Test GC.
+		collectgarbage("collect")
+		assert(table.Count(Promise.GetPromises()) == startPromiseNum, "Promises not cleaned up")
+    end)
+end)

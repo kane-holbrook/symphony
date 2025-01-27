@@ -75,3 +75,64 @@ function EVENTBUS.Prototype:Run(name, ...)
     Event = nil
     return er
 end
+
+hook.Add("Test.Register", "EventBus", function()
+    Test.Register("Events", function ()
+        local ev = Type.New(Type.EventBus)
+        
+        local r = false
+        local id = ev:Hook("Event", function (a)
+            Test.Equals(a, 32)
+            Test.Equals(Event:GetName(), "Event")
+            Test.Equals(Event:GetCancelled(), nil)
+            Test.Equals(Event:GetData()[1], 32)
+            Test.Equals(Event:GetResult(), nil)
+            r = true
+            Event:SetResult(true)
+        end)
+        Test.Equals(getmetatable(ev["Event"]).n, 1) -- n/w
+
+        local er = ev:Run("Event", 32)
+        Test.Equals(r, true)
+        Test.Equals(er:GetCancelled(), nil)
+        Test.Equals(er:GetResult(), true)
+        assert(getmetatable(ev["Event"]).Cache, "Cache not generated")
+
+        ev:Hook("Event", function(a)
+            Event:SetCancelled(true)
+        end, id)		
+        Test.Equals(getmetatable(ev["Event"]).n, 1)
+
+        er = ev:Run("Event", 32)
+        Test.Equals(er:GetCancelled(), true)
+
+        r = false
+        ev:Hook("Event", function(a)
+            r = true
+        end, id)		
+        ev:Unhook("Event", id)
+        Test.Equals(getmetatable(ev["Event"]).n, 0)
+        assert(not getmetatable(ev["Event"]).Cache, "Cache still exists")
+
+        er = ev:Run("Event", 32)
+        Test.Equals(er:GetCancelled(), nil)
+        Test.Equals(r, false)
+
+
+        -- Priorities
+        ev:Hook("Event", function (a)
+            Test.Equals(Event:GetCancelled(), true)
+            r = true
+        end)
+
+        ev:Hook("Event", function ()
+            Test.Equals(Event:GetCancelled(), nil)
+            Event:SetCancelled(true)			
+            -- This should run first
+        end, nil, -1)
+
+        er = ev:Run("Event", 32)
+        Test.Equals(er:GetCancelled(), true)
+        Test.Equals(r, true)
+    end)
+end)
