@@ -63,6 +63,10 @@ do
 		return self.Super
 	end
 
+	function TYPE:GetType()
+		return TYPE
+	end
+
 	-- @test Type.Register
 	function TYPE:__tostring()
 		return "Type[" .. self.Name .. "]"
@@ -152,6 +156,17 @@ do
 	TYPE.Options = {}
 	function TYPE:GetOptions()
 		return self.Options
+	end
+	
+	function TYPE:Serialize(obj, ply)
+		return obj:GetProperties()
+	end
+
+	function TYPE:Deserialize(obj, data)
+		for k, v in pairs(data) do
+			obj:SetProperty(k, v)
+		end
+		return obj
 	end
 
 	-- Registering us
@@ -251,16 +266,16 @@ do
 		return out
 	end
 
-	function OBJ:Serialize(ply)
-		local out = self:GetProperties()
-		return out
-	end
+	--function OBJ:Serialize(ply)
+	--	local out = self:GetProperties()
+	--	return out
+	--end
 
-	function OBJ:Deserialize(data)
-		for k, v in pairs(data) do
-			self:SetProperty(k, v)
-		end
-	end
+	--function OBJ:Deserialize(data)
+	--	for k, v in pairs(data) do
+	--		self:SetProperty(k, v)
+	--	end
+	--end
 end
 
 -- Statics
@@ -322,30 +337,16 @@ do
 		return Type.ByCode[code]
 	end
 
-	function Type.Is(obj, type)		
-		if not istable(obj) then
-			return false
+	function Type.GetType(obj)
+		if obj.GetType then
+			return obj:GetType()
+		elseif istable(obj) then
+			return Type.Table
 		end
-
-		if obj.Id then
-			obj = obj:GetType()
-		end		
-
-		if not obj.Ancestry then
-			return false
-		end
-
-		return obj == type 
 	end
-	Is = Type.Is
 
-	function Type.IsObject(obj)
-		return Type.IsDerived(obj, TYPE)
-	end
-	IsObject = Type.IsObject
-
-	-- @test Type.Register
-	function Type.IsDerived(obj, super)
+	-- @test Type.Register  @REVIEW
+	function Type.Is(obj, super)
 		if not istable(obj) then
 			return false
 		end
@@ -364,8 +365,9 @@ do
 
 		return obj.Ancestry[super] == true
 	end
+	Is = Type.Is
 
-	-- @test Type.New
+	-- @test Type.New  @REVIEW
 	function Type.New(type, id)
 		assert(type, "Must provide a type to Type.New")
 
@@ -403,42 +405,37 @@ do
 			root.firstType, root.first = Type.Serialize(data, ply, root)
 			root.map = nil
 			root.num = nil
+
 			return root
 		end
 		
-		local typeId = TypeID(data)
-		if typeId == TYPE_TABLE then
-
+		local tp = Type.GetType(data)		
+		local code = tp:GetCode()
+		
+		if istable(data) then
 			local e = root.map[data]
-			if root.map[data] then
-				return TYPE_TABLE, e
-			end		
-
+			if e then
+				return code, e
+			end
 
 			local t = {}
-			
 			local id = root.num + 1
 			root.map[data] = id
-			root.items[id] = t
 			root.num = id
 
-			if Type.IsObject(data) then
-				for k, v in pairs(data:Serialize(ply)) do
-					t[k] = { Type.Serialize(v, ply, root) }
-				end
-				t.Id = { TYPE_STRING, data:GetId() }
-
-				typeId = data:GetType():GetCode()
-			else
-				for k, v in pairs(data) do
-					t[k] = { Type.Serialize(v, ply, root) }
-				end
+			for k, v in pairs(tp:Serialize(data)) do
+				t[k] = { Type.Serialize(v, ply, root) }
 			end
-			
-			
-			return typeId, id
+
+			if data.GetId then
+				t.Id = { Type.String:GetCode(), data:GetId() }
+			end
+
+			root.items[id] = t
+
+			return code, id
 		else
-			return typeId, data
+			return code, tp:Serialize(data)
 		end
 	end
 
@@ -453,42 +450,41 @@ do
 
 			return Type.Deserialize({root.firstType, root.first}, root)
 		else
+			Test.Assert(data, "Data is nil", 2)
 			local typeId = data[1]
-			if typeId == TYPE_TABLE or typeId >= 256 then
-				local t = {}
-				local k = data[2]
-				local seen = root.seen[k]
+			local value = data[2]
+
+			local type = Type.GetByCode(typeId)
+			Test.Assert(type, "Type not found for code: " .. typeId)
+
+			if Is(type, Type.Primitive) then
+				return type:Deserialize(value)
+			else
+				local key = value
+
+				local seen = root.seen[key]
 				if seen then
 					return seen
 				end
 
-				if typeId >= 256 then
+				value = root.items[key]
 
-					local val = root.items[k]
-					local id = Type.Deserialize(val["Id"], root)
-					val["Id"] = nil
-
-					local o = Type.New(Type.GetByCode(typeId), id)
-					root.seen[k] = o
-
-					for k, v in pairs(val) do
-						t[k] = Type.Deserialize(v, root)
-					end
-
-					o:Deserialize(t)
-					return o
-				else
-					root.seen[k] = t
-					
-					local val = root.items[k]
-					for k, v in pairs(val) do
-						t[k] = Type.Deserialize(v, root)
-					end
-					return t
+				local id
+				if typeId ~= TYPE_TABLE then
+					id = Type.Deserialize(value.Id, root)
+					value.Id = nil
 				end
 
-			else
-				return data[2]
+				local obj = new(type, id)
+				root.seen[key] = obj
+
+				local t = {}
+				for k, v in pairs(value) do
+					t[k] = Type.Deserialize(v, root)
+				end	
+
+				type:Deserialize(obj, t)
+				return obj
 			end
 		end
 	end
@@ -498,7 +494,8 @@ do
 	end
 
 	function net.ReadObject()
-		return Type.Deserialize(net.ReadTable())
+		local t = net.ReadTable()
+		return Type.Deserialize(t)
 	end
 end
 
@@ -515,7 +512,7 @@ hook.Add("Test.Register", "Types", function ()
 
 		assert(Type.ByName["TestType"] == t, "Type not registered in ByName")
 		assert(Type.ByCode[t:GetCode()] == t, "Type not registered in ByCode")
-		assert(Type.IsDerived(t, Type.Type), "Type not derived from Type")
+		assert(Type.Is(t, Type.Type), "Type not derived from Type")
 		
 		local code = t:GetCode()
 		t = nil
@@ -594,7 +591,6 @@ hook.Add("Test.Register", "Types", function ()
 	end)
 
 	root:AddTest("Serialization", function ()
-
 		-- Test the primitive types first
 		Test.Equals(Type.Deserialize(Type.Serialize(32)), 32)
 		Test.Equals(Type.Deserialize(Type.Serialize("Hello")), "Hello")
@@ -636,7 +632,7 @@ hook.Add("Test.Register", "Types", function ()
 
 		Test.Equals(r:GetChild():GetValue(), 32)
 		Test.Equals(r:GetValue(), 40)
-		Test.Equals(r:GetId(), i2:GetId())
+		Test.Equals(r:GetId(), i2:GetId())--]]
 
 		Type.ByName["TestType"] = nil
 		Type.ByCode[t:GetCode()] = nil
@@ -681,7 +677,7 @@ hook.Add("Test.Register", "Types", function ()
 	end)
 
 	root:AddTest("Database", function ()
-		error("Not implemented")
+		error("Not implemented", 2)
 	end)
 end)
 

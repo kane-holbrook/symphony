@@ -1,7 +1,14 @@
 Test = {}
 
 function Test.Equals(a, b)
-    assert(a == b, "Expected: " .. tostring(b) .. ", got: " .. tostring(a) .. "\n\n" .. debug.traceback())
+    Test.Assert(a == b, "Expected: " .. tostring(b) .. ", got: " .. tostring(a) .. "\n\n" .. debug.traceback(), 2)
+end
+
+function Test.Assert(cond, msg, level)
+	level = level or 1
+	if not cond then
+		error(msg or "Assertion failed", level + 1)
+	end
 end
 
 local TEST = Type.Register("UnitTest")

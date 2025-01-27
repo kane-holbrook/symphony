@@ -2,11 +2,30 @@ AddCSLuaFile()
 
 local PRIMITIVE = Type.Register("Primitive")
 
+function PRIMITIVE:Serialize(data, ply, root)
+    return data
+end
+
+function PRIMITIVE:Deserialize(data)
+    return data
+end
+
+
 local function PopulateMetaTable(mt, type)
     mt.GetType = function() return type end
     mt.GetCode = function() return type.Code end
 end
 
+local function GenerateIndexer(t)
+    return function(self, key)
+        local v = t[key]
+        if v then
+            return v
+        end
+
+        error("Attempt to index a " .. type(self) .. " value.", 2)
+    end
+end
 
 local STRING = Type.Register("String", PRIMITIVE, { Code = TYPE_STRING, DatabaseType = "TEXT" })
 function STRING.Parse(value)
@@ -27,7 +46,7 @@ end
 function NUMBER.DbEncode(value)
     return tostring(value)
 end
-debug.setmetatable(32, { __index = NUMBER.Prototype, Type = NUMBER })
+debug.setmetatable(32, { __index = GenerateIndexer(NUMBER.Prototype), Type = NUMBER })
 
 
 local BOOLEAN = Type.Register("Boolean", PRIMITIVE, { Code = TYPE_BOOL, DatabaseType = "BOOLEAN" })
@@ -44,7 +63,7 @@ end
 function BOOLEAN.DbEncode(value)
     return value and "true" or "false"
 end
-debug.setmetatable(true, { __index = BOOLEAN.Prototype, Type = BOOLEAN })
+debug.setmetatable(true, { __index = GenerateIndexer(BOOLEAN.Prototype), Type = BOOLEAN })
 
 
 local NIL = Type.Register("Nil", PRIMITIVE, { Code = TYPE_NIL })
@@ -55,7 +74,7 @@ end
 function NIL.DbEncode(value)
     return "NULL"
 end
-debug.setmetatable(nil, { __index = NIL.Prototype, Type = NIL })
+debug.setmetatable(nil, { __index = GenerateIndexer(NIL.Prototype), Type = NIL })
 
 
 local ENTITY = Type.Register("Entity", PRIMITIVE, { Code = TYPE_ENTITY })
@@ -109,7 +128,18 @@ end
 PopulateMetaTable(FindMetaTable("VMatrix"), MATRIX)
 
 
-local TABLE = Type.Register("Table", PRIMITIVE, { Code = TYPE_TABLE, DatabaseType = "JSON" })
+local TABLE = Type.Register("Table", nil, { Code = TYPE_TABLE, DatabaseType = "JSON" })
+
+function TABLE:Serialize(value, ply, root)
+    return value
+end
+
+function TABLE:Deserialize(obj, data)
+    for k, v in pairs(data) do
+        obj[k] = v
+    end
+end
+
 function TABLE.Parse(value)
     return util.JSONToTable(value)
 end
@@ -124,7 +154,7 @@ function Type.IsPrimitive(obj, allowNil)
     if (not allowNil and not obj) or not obj.GetType then
         return false
     end
-    return Type.IsDerived(obj:GetType(), PRIMITIVE)
+    return Type.Is(obj:GetType(), PRIMITIVE)
 end
 IsPrimitive = Type.IsPrimitive
 
