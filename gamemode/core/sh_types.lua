@@ -268,11 +268,12 @@ do
 	-- @test Type.Register
 	function Type.Register(name, super, options)
 		super = super or Type.Type
+		options = setmetatable(options or {}, { __index = super.Options })
 
 		local t = Type.ByName[name]
 		if not t then
 			t = {}
-			t.Code = 256 + util.CRC(name) -- This is the unique int32 code used in networking etc.
+			t.Code = options.Code or (256 + util.CRC(name)) -- This is the unique int32 code used in networking etc.
 			assert(not Type.ByCode[t.Code], "Type code collision: " .. name)
 		end
 
@@ -285,7 +286,7 @@ do
 		t.Derivatives = {}
 		t.Instances = {}
 		t.InstanceCount = 0
-		t.Options = setmetatable(options or {}, { __index = super.Options })
+		t.Options = options
 
 		super.Derivatives[name] = t
 		
@@ -641,10 +642,6 @@ hook.Add("Test.Register", "Types", function ()
 		Type.ByCode[t:GetCode()] = nil
 	end)
 
-	root:AddTest("Database", function ()
-		error("Not implemented")
-	end)
-
 	root:AddTest("Networking", function ()
 		
 		local t = Type.Register("TEST_OBJECT", nil)
@@ -679,7 +676,12 @@ hook.Add("Test.Register", "Types", function ()
 
 		TEST_NET_PROMISE = nil		
 		Type.ByName["TEST_OBJECT"] = nil
+		Type.ByCode[t:GetCode()] = nil
 		collectgarbage("collect")
+	end)
+
+	root:AddTest("Database", function ()
+		error("Not implemented")
 	end)
 end)
 
