@@ -7,7 +7,10 @@ local PROMISE = Type.Register("Promise")
 do
     PROMISE:CreateProperty("Result")
     PROMISE:CreateProperty("Completed")
+    PROMISE:CreateProperty("TTL")
+    PROMISE:CreateProperty("Error")
 
+    -- @test sh_tests/Promises
     function PROMISE.Prototype:Initialize()
         base()
 
@@ -17,13 +20,17 @@ do
         self.threads = {}
 
         self:SetCompleted(false)
+        self:SetTTL(30)
+        Promise.All[self] = true
     end
 
+    -- @test sh_tests/Promises
     function PROMISE.Prototype:SetFunc(func)
         self.func = func
         self.thread = coroutine.create(func)
     end
 
+    -- @test sh_tests/Promises
     function PROMISE.Prototype:Hook(...)
         self.Events:Hook("Complete", ...)
     end
@@ -32,35 +39,45 @@ do
         self.Events:Unhook(...)
     end
 
+    -- @test sh_tests/Promises
     function PROMISE.Prototype:ThrowError(err)
+        timer.Remove(self:GetId())
+        err = err .. "\n" .. debug.traceback()
         self.Events:Invoke("Error", err)
-        error(err)
+        self:SetError(err)
+        return err
     end
 
+    -- @test sh_tests/Promises
     function PROMISE.Prototype:Resume(...)
-        assert(coroutine.status(self.thread) ~= "dead", "Promise is dead")
+        local cr = self:GetCoroutine()
+        assert(coroutine.status(cr) ~= "dead", "Promise is dead")
         
         local LAST_PROMISE = Promise.Current
         Promise.Current = self
-        
-        local args = { coroutine.resume(self.thread, ...) }
+
+        timer.Create(self:GetId(), self:GetTTL(), 0, function() error(tostring(self) .. " exceeded TTL=" .. self:GetTTL()) end)
+
+        local args = { coroutine.resume(cr, ...) }
         local succ = args[1]
         
         if not succ then 
-            self:ThrowError(args[2]) 
+            args[2] = self:ThrowError(args[2]) 
         end
         
-        local rtn = tablex.Splice(args, 2)
-        if #rtn > 0 or coroutine.status(self.thread) == "dead" then 
-            self:Complete(unpack(rtn)) 
+        if coroutine.status(cr) == "dead" then 
+            self:Complete(unpack(args)) 
         end
-
-        Promise.All[self] = true        
+     
         Promise.Current = LAST_PROMISE
+
+        return self
     end
 
+    -- @test sh_tests/Promises
     function PROMISE.Prototype:Await()
         if self:IsComplete() then
+            -- Consider delaying this 1 tick so that hooks run first, as this effectively sidesteps?
             return self:GetResult()
         end
 
@@ -68,12 +85,13 @@ do
         return coroutine.yield()
     end    
 
+    -- @test sh_tests/Promises
     function PROMISE.Prototype:Complete(...)
         local args = {...}
         self:SetResult(args)
-
         timer.Simple(0, function ()
-            self.Events:Invoke("Complete", unpack(args))
+            
+            self.Events:Run("Complete", unpack(args))
 
             for k, v in pairs(self.awaits) do
                 v:Resume(unpack(args))
@@ -82,33 +100,60 @@ do
             for k, v in pairs(self.coroutines) do
                 coroutine.resume(v, unpack(args))
             end
-
-            self.Events:Invoke("Complete", unpack(args))
+            
         end)
         self.Completed = true
+        
+        timer.Remove(self:GetId())
 
         Promise.All[self] = nil
     end
 
+    -- @test sh_tests/Promises
     function PROMISE.Prototype:IsComplete()
         return self.Completed
     end
 
-    function PROMISE:GetResult()
+    -- @test sh_tests/Promises
+    function PROMISE.Prototype:GetResult()
         return unpack(self.Result)
     end
 
+    function PROMISE.Prototype:GetCoroutine()
+        return self.thread
+    end
+
+    -- @test sh_tests/Promises
     function PROMISE.Metamethods:__tostring()
-        return "Promise[" .. self:GetId() .. "]"
+        return "Promise[" .. self:GetId() .. "](" .. coroutine.status(self:GetCoroutine()) .. ")"
     end
 
     PROMISE.Prototype.Start = PROMISE.Prototype.Resume
 end
 
-function Promise.Create(func)
+-- @test sh_tests/Promises
+function Promise.Create(func, ttl)
     local p = Type.New(PROMISE)
     p:SetFunc(func)
+    p:SetTTL(ttl or 30)
     return p
+end
+
+-- @test sh_tests/Promises
+function Promise.Run(func, ttl)
+    assert(func, "Must provide function if using Promise.Run")
+    local p = Promise.Create(func, ttl)
+    p:Start()
+    return p
+end
+
+-- @test sh_tests/Promises
+function Promise.Sleep(t)
+    local cr = Promise.Current
+    timer.Simple(t, function ()
+        cr:Resume()
+    end)
+    coroutine.yield()
 end
 
 function Promise.GetPromise()

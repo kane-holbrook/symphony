@@ -251,7 +251,7 @@ do
 		return out
 	end
 
-	function OBJ:Serialize()
+	function OBJ:Serialize(ply)
 		local out = self:GetProperties()
 		return out
 	end
@@ -387,7 +387,7 @@ do
 	end
 	new = Type.New
 
-	function Type.Serialize(data, root)
+	function Type.Serialize(data, ply, root)
 		-- Effectively this just parses data, calling encode where necessary on objects, which call this
 		-- recursively.
 
@@ -397,7 +397,7 @@ do
 			root.map = {}
 			root.items = {}
 			root.num = 0
-			root.firstType, root.first = Type.Serialize(data, root)
+			root.firstType, root.first = Type.Serialize(data, ply, root)
 			root.map = nil
 			root.num = nil
 			return root
@@ -413,15 +413,15 @@ do
 
 			local t = {}
 			if Type.IsObject(data) then
-				for k, v in pairs(data:Serialize()) do
-					t[k] = { Type.Serialize(v, root) }
+				for k, v in pairs(data:Serialize(ply)) do
+					t[k] = { Type.Serialize(v, ply, root) }
 				end
 				t.Id = { TYPE_STRING, data:GetId() }
 
 				typeId = data:GetType():GetCode()
 			else
 				for k, v in pairs(data) do
-					t[k] = { Type.Serialize(v, root) }
+					t[k] = { Type.Serialize(v, ply, root) }
 				end
 			end
 

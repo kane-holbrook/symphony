@@ -3,6 +3,12 @@ DeriveGamemode("sandbox")
 
 sym = sym or {}
 
+function Benchmark(f)
+    local s = SysTime()
+    f()
+    return SysTime() - s
+end
+
 local Logged = {}
 function sym.log(type, content, data, time, realm)
     table.insert(Logged, { 
@@ -63,6 +69,7 @@ sym.Include("types/framework/proxy.lua", sym.realms.shared)
 sym.Include("types/framework/primitives.lua", sym.realms.shared)
 sym.Include("types/framework/promise.lua", sym.realms.shared)
 sym.Include("core/sh_tests.lua", sym.realms.shared)
+
 
 
 -- core/sh_payloads.lua?

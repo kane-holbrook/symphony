@@ -55,6 +55,7 @@ local TypeFuncs = {
 }
 sym.logging.TypeFuncs = TypeFuncs
 
+
 function sym.LogLevel(level)
     level = level or LOG_DEBUG
     return LogCvar:Get() >= level

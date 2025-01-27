@@ -1,7 +1,7 @@
 Test = {}
 
 function Test.Equals(a, b)
-    assert(a == b, "Expected: " .. tostring(b) .. ", got: " .. tostring(a))
+    assert(a == b, "Expected: " .. tostring(b) .. ", got: " .. tostring(a) .. "\n\n" .. debug.traceback())
 end
 
 local TEST = Type.Register("UnitTest")
@@ -24,28 +24,44 @@ function TEST.Prototype:AddTest(name, func)
     return t
 end
 
-function TEST.Prototype:Run()
-    local f = self:GetFunc()
-    local succ, msg
-    if f then
-        succ = true
-        xpcall(f, function (m)
-                msg = m .. "\n" .. debug.traceback()
-                succ = false
-        end) 
-    end
+function TEST.Prototype:Run(l)
+	l = l or 0
+	return Promise.Run(function ()
+		local f = self:GetFunc()
+		local pass, fail = 0, 0
 
-    local children = {}
-    for k, v in pairs(self:GetChildren()) do
-        table.insert(children, { v:Run() })
-    end
+		MsgC(string.rep("  ", l), self:GetName())
+		if f then
+			MsgC(" -> ")
+			local succ, msg = pcall(f)
+			if succ then
+				MsgC(Color(192, 255, 192), "PASS\n")
+				pass = pass + 1
+			else
+				MsgC(Color(255, 192, 192), "FAIL: ", msg, "\n")
+				succ = succ + 1
+			end
+		else
+			MsgC(":\n")
+		end
 
-    return self, succ, msg, children
+		for k, v in pairs(self:GetChildren()) do
+			local succ, cpass, cfail = v:Run(l+1):Await()
+			if succ then
+				pass = pass + cpass
+				fail = fail + cfail
+			else
+				fail = fail + 1
+			end
+		end
+
+		return pass, fail
+	end)
 end
 
 
 Test.All = new(TEST)
-Test.All:SetName("*")
+Test.All:SetName("Tests")
 
 function Test.GetAll()
     return Test.All
@@ -65,47 +81,14 @@ end
 
 if CLIENT then
     concommand.Add("sym_test", function (ply, cmd, args)
-        --[[if #args == 0 then
-            local function recurse(t, l)
-                print(string.rep("  ", l) .. "• " .. t:GetName())
-                for k, v in pairs(t:GetChildren()) do
-                    recurse(v, l + 1)
-                end
-            end
-
-            print("Available tests:")
-            for k, v in pairs(Test.GetAll():GetChildren()) do
-                recurse(v, 1)
-            end
-        end--]]
-        local nsucc, nfail = 0, 0
-        local _, _, _, result = Test.All:Run()
-        
-        local function recurse(t, l)
-            local test = t[1]
-            local succ = t[2]
-            local msg = t[3]
-            local children = t[4]
-
-            local pfx = string.rep("  ", l)
-            if succ == true then
-                nsucc = nsucc + 1
-                MsgC(pfx, test:GetName(), " -> ", Color(192, 255, 192), msg or "PASS", "\n")
-            elseif succ == false then
-                nfail = nfail + 1
-                MsgC(pfx, test:GetName(), " -> ", Color(255, 192, 192), msg or "FAIL", "\n")
-            else
-                MsgC(pfx, test:GetName(), ":", msg or "", "\n")
-            end
-            
-            for k, v in pairs(children) do
-                recurse(v, l + 1)
-            end
-        end
-        recurse(result[1], 1)
-        collectgarbage("collect")
-
-        MsgC("\nResults:\n  ", Color(128, 255, 128), nsucc, Color(192, 255, 192), " PASS", color_white, " | ", Color(255, 128, 128), nfail, Color(255, 192, 192), " FAIL\n")
+		Promise.Run(function ()
+			local succ, nsucc, nfail = Test.All:Run():Await()
+			if succ then
+				MsgC("\nResults:\n  ", Color(128, 255, 128), nsucc, Color(192, 255, 192), " PASS", color_white, " | ", Color(255, 128, 128), nfail, Color(255, 192, 192), " FAIL\n")
+			else
+				MsgC("\nResults:\n  ", Color(128, 255, 128), 0, Color(192, 255, 192), " PASS", color_white, " | ", Color(255, 128, 128), 1, Color(255, 192, 192), " FAIL\n")
+			end
+		end)
     end)
 end
 
@@ -357,26 +340,119 @@ do
 
     root:AddTest("Promises", function ()
         local p
+        local p2 
+		local succ, a, b, c
+		local hookSucc
+		local startPromiseNum = table.Count(Promise.GetPromises())
+		
+		-- Asynchronous - happy path
         p = Promise.Create(function ()
-            timer.Simple(1, function ()
-                p:Resume()
-            end)
-
-            coroutine.yield()                        
+            Promise.Sleep(0) -- Sleep for 1 tick   
+			Test.Equals(tostring(p), "Promise[" .. p:GetId() .. "](running)")
             return 32, 64, 128
         end)
-        
-        local p2 
+
+		Test.Equals(ispromise(p), true)
+		Test.Equals(ispromise(root), false)
+		Test.Equals(ispromise(32), false)
+		assert(Promise.GetPromises()[p])
+		Test.Equals(tostring(p), "Promise[" .. p:GetId() .. "](suspended)")
+
         p2 = Promise.Create(function ()
             p:Start()
-            local a, b, c = p:Await()
-            print("p2", a, b, c)
+            local succ, a, b, c = p:Await()
+			Test.Equals(succ, true)
+			Test.Equals(Promise.Current, p2)
+
+			return a, b, c
         end)
-        p2:Start()
 
-        g_p = p
-        g_p2 = p2
+		hookSucc = false
+		p2:Hook(function(succ, a, b, c)
+			Test.Equals(succ, true)
+			Test.Equals(a, 32)
+			Test.Equals(b, 64)
+			Test.Equals(c, 128)
+			hookSucc = true
+		end)
+		
+		p2:Start()
+		succ, a, b, c = p2:Await()
+		Test.Equals(hookSucc, true)
+		Test.Equals(p2:IsComplete(), true)
+		Test.Equals(p2:GetError(), nil)
+		Test.Equals(tostring(p), "Promise[" .. p:GetId() .. "](dead)")
+		
+		Test.Equals(succ, true)
+		Test.Equals(a, 32)
+		Test.Equals(b, 64)
+		Test.Equals(c, 128)
 
-        return p
+		
+		-- Asynchronous - error path
+		p = Promise.Create(function()
+			Promise.Sleep(0) -- Sleep for 1 tick   
+			error("Test error")
+			return 32, 64, 128
+		end)
+
+		p2 = Promise.Create(function()
+			p:Start()
+			local succ, a, b, c = p:Await()
+			Test.Equals(succ, false)
+			error(a)
+			return a, b, c
+		end)
+
+		p2:Start()
+		succ, a, b, c = p2:Await()
+		Test.Equals(succ, false)
+
+		-- Synchronous - happy path
+        p = Promise.Create(function ()
+            return 32, 64, 128
+        end)
+
+        p2 = Promise.Create(function ()
+            p:Start()
+            local succ, a, b, c = p:Await()
+			Test.Equals(succ, true)
+
+			return a, b, c
+        end)
+		
+		p2:Start()
+		succ, a, b, c = p2:Await()
+		
+		Test.Equals(succ, true)
+		Test.Equals(a, 32)
+		Test.Equals(b, 64)
+		Test.Equals(c, 128)
+		
+		-- Synchronous - error path
+		p = Promise.Create(function()
+			error("Test error")
+			return 32, 64, 128
+		end)
+
+		p2 = Promise.Create(function()
+			p:Start()
+			local succ, a, b, c = p:Await()
+			Test.Equals(succ, false)
+			error(a)
+			return a, b, c
+		end)
+
+		p2:Start()
+		succ, a, b, c = p2:Await()
+		Test.Equals(succ, false)
+
+
+		p = nil
+		p2 = nil
+
+		-- Test GC.
+		collectgarbage("collect")
+		assert(table.Count(Promise.GetPromises()) == startPromiseNum, "Promises not cleaned up")
     end)
 end
