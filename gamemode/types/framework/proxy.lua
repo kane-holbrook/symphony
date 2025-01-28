@@ -33,7 +33,7 @@ function Proxy(value)
 end
 
 function IsProxy(obj)
-    return Type.IsDerived(obj, PROXY)
+    return Type.Is(obj, PROXY)
 end
 
 

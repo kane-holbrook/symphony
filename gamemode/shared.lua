@@ -80,3 +80,43 @@ sym.Include("core/sh_tests.lua", sym.realms.shared)
 -- core/sh_usergroups.lua
 -- core/sh_messages.lua !!
 -- core/ui/* !!
+
+
+if SERVER then
+    util.AddNetworkString("test_net")
+
+    concommand.Add("TestNet", function (ply, cmd, args)
+        local lotsOfData = string.rep("a", 10 * 1024 * 1024) -- 10 MB?
+        
+        local idx = 1
+        local num = math.ceil(lotsOfData:len() / 32000)
+        local total = 0
+        for i=1, num do
+            net.Start("test_net", true)
+                local start = (i - 1) * 32000
+                local data = lotsOfData --string.sub(lotsOfData, start, start + 32000)
+
+                net.WriteUInt(i, 32)    
+                net.WriteUInt(num, 32)    
+                net.WriteString(data)
+                
+                local written = net.BytesWritten()
+                total = total + written
+
+            net.Send(ply)
+
+            
+            if total > 64000 then
+                print("Broke on", i)
+                break
+            end
+        end
+    end)
+else
+    net.Receive("test_net", function (len)
+        local idx = net.ReadUInt(32)
+        local num = net.ReadUInt(32)
+        local data = net.ReadString()
+        print("Received", idx, num, string.len(data))
+    end)
+end

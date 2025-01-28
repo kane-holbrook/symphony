@@ -170,10 +170,8 @@ function Promise.GetPromises()
 end
 
 function ispromise(obj)
-    return Type.IsDerived(obj, Type.Promise)
+    return Type.Is(obj, Type.Promise)
 end
-
-
 
 hook.Add("Test.Register", "Promises", function ()
     Test.Register("Promises", function ()
