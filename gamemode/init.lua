@@ -1,19 +1,17 @@
 include("shared.lua")
 
+Database.Connect()
 
---[[sym.http.Start()
 
-sym.http.Hook("/", function (ply, req, resp, path)
-    resp.Headers = resp.Headers or {}
-    resp.Headers["Location"] = "https://sstrp.net"
-    resp.StatusCode = 301
-    return true
+--[[concommand.Add("debug", function (ply, cmd, args)
+    assert(ply == NULL)
+
+    require("rdb")
+    rdb.activate()
 end)
 
-sym.http.Hook("ping", function (ply, req, resp, path)
-    return "Pong"
+hook.Add("OnLuaError", "symphony/init.lua", function (error, realm, stack, name, id)
+    print("LuaError")
+    require("rdb")
+    rdb.activate()
 end)--]]
-
---sym.db.Connect()
-
-sym.log("FRAMEWORK", "Framework finished loading in " .. math.Round((SysTime() - SYM_START_TIME) * 1000, 2) .. "ms.")
