@@ -50,27 +50,29 @@ MsgC(color_white, os.date("%X"), "|", PRINT_COL, color_white, PRINT_COL, "INFO",
 sym.log("FRAMEWORK", "Framework starting.")
 
 include("utils.lua")
-sym.Include("lib/containers.lua", sym.realms.shared)
-sym.Include("lib/stringex.lua", sym.realms.shared)
-sym.Include("lib/mathex.lua", sym.realms.shared)
-sym.Include("lib/tablex.lua", sym.realms.shared)
-sym.Include("lib/filex.lua", sym.realms.shared)
-sym.Include("lib/colorex.lua", sym.realms.shared)
-sym.Include("lib/uuid.lua", sym.realms.shared)
-sym.Include("lib/materialex.lua", sym.realms.shared)
-sym.Include("lib/drawex.lua", sym.realms.shared)
+IncludeEx("lib/containers.lua", Realm.Shared)
+IncludeEx("lib/stringex.lua", Realm.Shared)
+IncludeEx("lib/mathex.lua", Realm.Shared)
+IncludeEx("lib/tablex.lua", Realm.Shared)
+IncludeEx("lib/filex.lua", Realm.Shared)
+IncludeEx("lib/colorex.lua", Realm.Shared)
+IncludeEx("lib/uuid.lua", Realm.Shared)
+IncludeEx("lib/materialex.lua", Realm.Shared)
+IncludeEx("lib/drawex.lua", Realm.Shared)
 
-Circles = sym.Include("lib/circles.lua", sym.realms.shared)
+Circles = IncludeEx("lib/circles.lua", Realm.Shared)
 
 -- core/sh_database.lua
-sym.Include("core/sh_types.lua", sym.realms.shared)
-sym.Include("types/framework/event.lua", sym.realms.shared)
-sym.Include("types/framework/proxy.lua", sym.realms.shared)
-sym.Include("types/framework/primitives.lua", sym.realms.shared)
-sym.Include("types/framework/promise.lua", sym.realms.shared)
-sym.Include("types/framework/datetime.lua", sym.realms.shared)
-sym.Include("core/sv_database.lua", sym.realms.server)
-sym.Include("core/sh_tests.lua", sym.realms.shared)
+IncludeEx("core/sh_types.lua", Realm.Shared)
+IncludeEx("types/framework/event.lua", Realm.Shared)
+IncludeEx("types/framework/proxy.lua", Realm.Shared)
+IncludeEx("types/framework/primitives.lua", Realm.Shared)
+IncludeEx("types/framework/promise.lua", Realm.Shared)
+IncludeEx("types/framework/rpc.lua", Realm.Shared)
+IncludeEx("types/framework/datetime.lua", Realm.Shared)
+IncludeEx("types/sv_database.lua", Realm.Server)
+IncludeEx("core/sv_database.lua", Realm.Server)
+IncludeEx("core/sh_tests.lua", Realm.Shared)
 
 
 
@@ -80,43 +82,3 @@ sym.Include("core/sh_tests.lua", sym.realms.shared)
 -- core/sh_usergroups.lua
 -- core/sh_messages.lua !!
 -- core/ui/* !!
-
-
-if SERVER then
-    util.AddNetworkString("test_net")
-
-    concommand.Add("TestNet", function (ply, cmd, args)
-        local lotsOfData = string.rep("a", 10 * 1024 * 1024) -- 10 MB?
-        
-        local idx = 1
-        local num = math.ceil(lotsOfData:len() / 32000)
-        local total = 0
-        for i=1, num do
-            net.Start("test_net", true)
-                local start = (i - 1) * 32000
-                local data = lotsOfData --string.sub(lotsOfData, start, start + 32000)
-
-                net.WriteUInt(i, 32)    
-                net.WriteUInt(num, 32)    
-                net.WriteString(data)
-                
-                local written = net.BytesWritten()
-                total = total + written
-
-            net.Send(ply)
-
-            
-            if total > 64000 then
-                print("Broke on", i)
-                break
-            end
-        end
-    end)
-else
-    net.Receive("test_net", function (len)
-        local idx = net.ReadUInt(32)
-        local num = net.ReadUInt(32)
-        local data = net.ReadString()
-        print("Received", idx, num, string.len(data))
-    end)
-end

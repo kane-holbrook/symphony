@@ -1,12 +1,11 @@
 AddCSLuaFile()
 
--- Realms
-sym.realms = {
-	server = 1,
-	client = 2,
-	shared = 3, -- bit.bor(server, client)
+Realm = {
+    Server = 1,
+    Client = 2,
+    Shared = 3
 }
-sym.realm = SERVER and sym.realms.server or sym.realms.client
+Realm.Current = SERVER and Realm.Server or Realm.Client
 
 function isany(t, ...)
     for k, v in pairs({...}) do
@@ -17,7 +16,7 @@ function isany(t, ...)
     return false
 end
 
-function sym.Include(path, realm)
+function IncludeEx(path, realm)
     if string.EndsWith(path, "/") then
         local files, dirs = file.Find(path .. "*.lua", "LUA")
         
@@ -32,20 +31,20 @@ function sym.Include(path, realm)
     local fname = string.GetFileFromFilename(path)
     if not realm then
         if string.StartsWith(fname, "sv_") then
-            realm = sym.realms.server
+            realm = Realm.Server
         elseif string.StartsWith(fname, "cl_") then
-            realm = sym.realms.client
+            realm = Realm.Client
         elseif string.StartsWith(fname, "sh_") then
-            realm = sym.realms.shared
+            realm = Realm.Shared
         end
     end
     assert(realm, "Realm must be provided if the file does not start with cl_ or sh_  or sv_")
     
-    if isany(realm, sym.realms.client, sym.realms.shared) then
+    if isany(realm, Realm.Client, Realm.Shared) then
         AddCSLuaFile(path)
     end
 
-    if isany(realm, sym.realm, sym.realms.shared) then
+    if isany(realm, Realm.Current, Realm.Shared) then
         local absPath = engine.ActiveGamemode() .. "/gamemode/" .. path
 
         if not file.Exists(absPath, "LUA") then
@@ -56,23 +55,6 @@ function sym.Include(path, realm)
             sym.log("LUA_INCLUDE", "Including \"<code>" .. path .. "</code>\"")
             --MsgC(color_white, os.date("%X"), "|", PRINT_COL, color_white, PRINT_COL, "INFO", color_white, "|", color_white, "Including: ", COL_STD, path, "\n")	
             return include(path)
-        end
-    end
-end
-
-function sym.IncludeDir(path, startFunc, endFunc, includePlugins, realm, plugin)
-    realm = realm or sym.realms.shared
-
-    if includePlugins then
-        for k, v in pairs(sym.plugins.ordered) do
-            sym.IncludeDir(v:GetPath() .. "/" .. path, startFunc, endFunc, includePlugins, realm, v)
-        end
-    else
-        local files, dirs = file.Find("*", "LUA")
-        for k, v in pairs(files) do
-            startFunc(path, plugin)
-                local r = { sym.TryInclude(path .. v, realm) }
-            endFunc(path, plugin, unpack(r))
         end
     end
 end

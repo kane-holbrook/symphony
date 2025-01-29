@@ -31,11 +31,11 @@ function sym.TryInclude(path, realm)
     assert(realm, "Realm must be provided")
     
     if file.Exists(path, "LUA") then
-        if SERVER and realm == sym.realms.client or realm == sym.realms.shared then
+        if SERVER and realm == Realm.Client or realm == Realm.Shared then
             AddCSLuaFile(path)
         end
 
-        if sym.realm == realm or realm == sym.realms.shared then
+        if sym.realm == realm or realm == Realm.Shared then
             
             return include(path)
         end
@@ -64,28 +64,28 @@ function sym.Include(path, realm)
     local fname = string.GetFileFromFilename(path)
     if not realm then
         if string.StartsWith(fname, "sv_") then
-            realm = sym.realms.server
+            realm = Realm.Server
         elseif string.StartsWith(fname, "cl_") then
-            realm = sym.realms.client
+            realm = Realm.Client
         elseif string.StartsWith(fname, "sh_") then
-            realm = sym.realms.shared
+            realm = Realm.Shared
         end
     end
     assert(realm, "Realm must be provided if the file does not start with cl_ or sh_  or sv_")
     
-    if isany(realm, sym.realms.client, sym.realms.shared) then
+    if isany(realm, Realm.Client, Realm.Shared) then
         sym.fine("ADDCSLUAFILE", path)
         AddCSLuaFile(path)
     end
 
-    if isany(realm, sym.realm, sym.realms.shared) then
+    if isany(realm, sym.realm, Realm.Shared) then
         sym.fine("INCLUDE", path)
         return include(path)
     end
 end
 
 function sym.IncludeDir(path, startFunc, endFunc, includePlugins, realm, plugin)
-    realm = realm or sym.realms.shared
+    realm = realm or Realm.Shared
 
     if includePlugins then
         for k, v in pairs(sym.plugins.ordered) do

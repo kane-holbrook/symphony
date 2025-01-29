@@ -1,17 +1,16 @@
 AddCSLuaFile()
 
-Promise = {}
+Promise = Type.Register("Promise")
 Promise.All = weaktable(true, false)
 
-local PROMISE = Type.Register("Promise")
 do
-    PROMISE:CreateProperty("Result")
-    PROMISE:CreateProperty("Completed")
-    PROMISE:CreateProperty("TTL")
-    PROMISE:CreateProperty("Error")
+    Promise:CreateProperty("Result")
+    Promise:CreateProperty("Completed")
+    Promise:CreateProperty("TTL")
+    Promise:CreateProperty("Error")
 
     -- @test sh_tests/Promises
-    function PROMISE.Prototype:Initialize()
+    function Promise.Prototype:Initialize()
         base()
 
         self.Events = Type.New(Type.EventBus)
@@ -25,9 +24,9 @@ do
     end
 
     -- @test sh_tests/Promises
-    function PROMISE.Prototype:SetFunc(func)
+    function Promise.Prototype:SetFunc(func)
         self.func = func
-
+        
         if func then
             self.thread = coroutine.create(func)
         else
@@ -36,16 +35,16 @@ do
     end
 
     -- @test sh_tests/Promises
-    function PROMISE.Prototype:Hook(...)
+    function Promise.Prototype:Hook(...)
         self.Events:Hook("Complete", ...)
     end
 
-    function PROMISE.Prototype:Unhook(...)
+    function Promise.Prototype:Unhook(...)
         self.Events:Unhook(...)
     end
 
     -- @test sh_tests/Promises
-    function PROMISE.Prototype:ThrowError(err)
+    function Promise.Prototype:ThrowError(err)
         timer.Remove(self:GetId())
         err = err .. "\n" .. debug.traceback()
         self.Events:Invoke("Error", err)
@@ -54,11 +53,11 @@ do
     end
 
     -- @test sh_tests/Promises
-    function PROMISE.Prototype:Resume(...)
+    function Promise.Prototype:Resume(...)
         local cr = self:GetCoroutine()
         assert(coroutine.status(cr) ~= "dead", "Promise is dead")
         
-        local LAST_PROMISE = Promise.Current
+        local LAST_Promise = Promise.Current
         Promise.Current = self
 
         timer.Create(self:GetId(), self:GetTTL(), 0, function() error(tostring(self) .. " exceeded TTL=" .. self:GetTTL()) end)
@@ -74,13 +73,13 @@ do
             self:Complete(unpack(args)) 
         end
      
-        Promise.Current = LAST_PROMISE
+        Promise.Current = LAST_Promise
 
         return self
     end
 
     -- @test sh_tests/Promises
-    function PROMISE.Prototype:Await()
+    function Promise.Prototype:Await()
         if self:IsComplete() then
             -- Consider delaying this 1 tick so that hooks run first, as this effectively sidesteps?
             return self:GetResult()
@@ -91,7 +90,7 @@ do
     end    
 
     -- @test sh_tests/Promises
-    function PROMISE.Prototype:Complete(...)
+    function Promise.Prototype:Complete(...)
         local args = {...}
         self:SetResult(args)
         timer.Simple(0, function ()
@@ -115,30 +114,30 @@ do
     end
 
     -- @test sh_tests/Promises
-    function PROMISE.Prototype:IsComplete()
+    function Promise.Prototype:IsComplete()
         return self.Completed
     end
 
     -- @test sh_tests/Promises
-    function PROMISE.Prototype:GetResult()
+    function Promise.Prototype:GetResult()
         return unpack(self.Result)
     end
 
-    function PROMISE.Prototype:GetCoroutine()
+    function Promise.Prototype:GetCoroutine()
         return self.thread
     end
 
     -- @test sh_tests/Promises
-    function PROMISE.Metamethods:__tostring()
+    function Promise.Metamethods:__tostring()
         return "Promise[" .. self:GetId() .. "](" .. coroutine.status(self:GetCoroutine()) .. ")"
     end
 
-    PROMISE.Prototype.Start = PROMISE.Prototype.Resume
+    Promise.Prototype.Start = Promise.Prototype.Resume
 end
 
 -- @test sh_tests/Promises
 function Promise.Create(func, ttl)
-    local p = Type.New(PROMISE)
+    local p = Type.New(Promise)
     p:SetFunc(func)
     p:SetTTL(ttl or 30)
     return p
