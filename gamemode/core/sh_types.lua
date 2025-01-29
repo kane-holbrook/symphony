@@ -48,6 +48,25 @@ do
 	TYPE.Name = "Type"
 	TYPE.Super = nil
 
+	function TYPE:New(id)
+		local t = {}
+		local mt = table.Copy(self.Metamethods)
+		mt.Id = id or uuid()
+		mt.Type = self
+		local super = self:GetSuper()
+		mt.Base = super.Prototype
+		mt.__index = mt -- The object should point at this metatable (so the object itself can remain clean).
+		setmetatable(mt, {
+			__index = self.Prototype -- However, if keys aren't found on the MT, they should be pulled from the proto.
+		})
+
+		setmetatable(t, mt)
+		self.InstanceCount = self.InstanceCount + 1
+		self.Instances[self.InstanceCount] = t
+		t:Invoke("Initialize")
+		return t
+	end
+
 	-- @test Type.Register
 	function TYPE:GetCode()
 		return self.Code
@@ -65,6 +84,91 @@ do
 
 	function TYPE:GetType()
 		return TYPE
+	end
+
+	function TYPE:CreateDatabaseTable(tables)
+		local name = self:GetOptions().DatabaseTable
+		if not name then
+			return
+		end
+		
+		local key = string.lower(self:GetDatabaseKey())
+
+		local qry
+		local fieldSQL = {}
+		if not tables[name] then
+			local sorted = table.ClearKeys(self:GetPropertyMetadata())
+			table.SortByMember(sorted, "index", true)
+
+			for k, f in pairs(sorted) do
+				local opt = f:GetOptions()
+				if opt.Transient then
+					continue
+				end
+
+				local i = {}
+				local fname = f:GetName()
+				i[1] = "`" .. hndl:escape(fname) .. "`"
+				i[2] = hndl:escape(f:GetPropertyType().__dbtype)
+
+				if opt.not_null then
+					table.insert(i, "NOT NULL")
+				end
+
+				if opt.auto_increment then
+					table.insert(i, "AUTO_INCREMENT")
+				end
+
+				if string.lower(fname) == key then
+					table.insert(i, "PRIMARY KEY")
+				end
+
+				if opt.field_options then
+					table.insert(i, opt.field_options)
+				end
+
+				table.insert(fieldSQL, table.concat(i, " "))
+			end
+
+			qry = "CREATE TABLE `" .. hndl:escape(name) .. "` (\n\t" .. table.concat(fieldSQL, ",\n\t") .. "\n)"
+			print("CREATE_TABLE", "Creating MySQL table for type ", FromPrimitive(stringex.TitleCase(self:GetTypeName())), color_white, ":\n", FromPrimitive(qry))
+
+			local p = sym.db.Query(qry)
+			p.query:wait()
+		else
+			for k, f in pairs(self:GetPropertyMetadata()) do
+				local opt = f:GetOptions()
+				if opt.Transient then
+					continue
+				end
+
+				local i = {}
+				local fname = f:GetName()
+				i[1] = "`" .. hndl:escape(fname) .. "`"
+				i[2] = hndl:escape(f:GetPropertyType().__dbtype)
+
+				if opt.not_null then
+					table.insert(i, "NOT NULL")
+				end
+
+				if string.lower(fname) == key then
+					table.insert(i, "PRIMARY KEY")
+				end
+
+				if opt.field_options then
+					table.insert(i, opt.field_options)
+				end
+				
+				table.insert(fieldSQL, "ADD COLUMN IF NOT EXISTS (" .. table.concat(i, " ") .. ")")
+
+			end
+			
+			qry = "ALTER TABLE `" .. hndl:escape(name) .. "` \n\t" .. table.concat(fieldSQL, ",\n\t")
+			sym.debug("ALTER_TABLE", "Adjusting MySQL table for type ", FromPrimitive(stringex.TitleCase(self:GetTypeName())))
+
+			local p = sym.db.Query(qry)
+			p.query:wait()
+		end
 	end
 
 	-- @test Type.Register
@@ -241,6 +345,10 @@ do
 
 	-- @test Type.New
 	function OBJ:Invoke(event, ...)
+		if IsPrimitive(self, true) then
+			return
+		end
+
 		if self[event] then
 			base__Name = event
 			base__Source = self
@@ -345,6 +453,10 @@ do
 		end
 	end
 
+	function Type.GetAll()
+		return Type.ByName
+	end
+
 	-- @test Type.Register  @REVIEW
 	function Type.Is(obj, super)
 		if not istable(obj) then
@@ -370,25 +482,7 @@ do
 	-- @test Type.New  @REVIEW
 	function Type.New(type, id)
 		assert(type, "Must provide a type to Type.New")
-
-		local t = {}
-		local mt = table.Copy(type.Metamethods)
-
-		mt.Id = id or uuid()
-		mt.Type = type
-
-		local super = type:GetSuper()
-		mt.Base = super.Prototype
-
-		mt.__index = mt -- The object should point at this metatable (so the object itself can remain clean).
-		setmetatable(mt, { __index = type.Prototype }) -- However, if keys aren't found on the MT, they should be pulled from the proto.
-		setmetatable(t, mt)
-
-		type.InstanceCount = type.InstanceCount + 1
-		type.Instances[type.InstanceCount] = t
-
-		t:Invoke("Initialize")
-		return t
+		return type:New(id)
 	end
 	new = Type.New
 
