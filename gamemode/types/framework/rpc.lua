@@ -1,10 +1,10 @@
 RPC = Type.Register("rpc")
 RPC.ByName = {}
 RPC.ByHash = weaktable(false, true)
+RPC.Requests = weaktable(false, true)
 
 RPC:CreateProperty("Name")
 RPC:CreateProperty("Realm")
-RPC:CreateProperty("Hash")
 RPC:CreateProperty("Func")
 
 function RPC.Register(name, realm, func)
@@ -13,19 +13,31 @@ function RPC.Register(name, realm, func)
     assert(func)
     
     local t = new(RPC)
-    local hash = util.CRC(name)
 
     t:SetName(name)
     t:SetRealm(realm)
-    t:SetHash(hash)
-
-    if realm == Realm then
+    if realm == Realm.Current then
         t:SetFunc(func)
     end
 
     RPC.ByName[name] = t
-    RPC.ByHash[hash] = t
     return t
+end
+
+if CLIENT then
+    function RPC.Call(name, ...)
+        local p = Promise.Create()
+
+        net.Start("RPC", false)
+            net.WriteString(p:GetId())
+            net.WriteString(name)
+            net.WriteObject({...})
+        net.SendToServer()
+
+        RPC.Requests[p:GetId()] = p
+
+        return p
+    end
 end
 
 function RPC.Get(name)
@@ -36,41 +48,87 @@ function RPC.Metamethods:__tostring()
     return "RPC[" .. self:GetName() .. "]"
 end
 
-function RPC.Metamethods:__call(...)
-    local p = Promise.Create()
-    return p
-end
-
-
-local RpcLibrary = {}
-function RpcLibrary:__newindex(k, v)
-    if istable(v) then
-        assert(not getmetatable(v), "Tables added to RPC libraries must not have a metatable.")
-        setmetatable(v, MT)
-    else
-        assert(isfunction(v), "RPC libraries must contain only functions or tables.")
-        rawset(self, k, v)
+RPC.Register("Test.RPC", Realm.Server, function (ply, a, b, asPromise)
+    if asPromise then
+        return Promise.Run(function ()
+            Promise.Sleep(0)
+            return "Results", a + b, a * b, a / b, a - b
+        end)
     end
-end
 
-Server = {}
-
-Server.Tests = {}
-Server.Tests.RPC = {}
-Server.Tests.RPC.
-
-
-
-
+    return "Results", a + b, a * b, a / b, a - b
+end)
 
 hook.Add("Test.Register", "symphony/rpc.lua", function ()
     Test.Register("RPC", function ()
-        local r = RPC.Get("Test.Add")
-        Test.Equals(r:GetName(), "Test.Add")
-        Test.Equals(r:GetRealm(), Realm.Shared)
-        Test.Equals(r:GetHash(), "2531216495")
+        local rpc = RPC.Get("Test.RPC")
+        Test.Equals(rpc:GetName(), "Test.RPC")
+        Test.Equals(rpc:GetRealm(), Realm.Server)
         
-        local r = r(32, 32)
+        local a, b, c, d, e = RPC.Call("Test.RPC", 8, 8):Await()
+        Test.Equals(a, "Results")
+        Test.Equals(b, 16)
+        Test.Equals(c, 64)
+        Test.Equals(d, 1)
+        Test.Equals(e, 0)
+
+        
+        
+        a, b, c, d, e = RPC.Call("Test.RPC", 8, 8, true):Await()
+        Test.Equals(a, "Results")
+        Test.Equals(b, 16)
+        Test.Equals(c, 64)
+        Test.Equals(d, 1)
+        Test.Equals(e, 0)
+
 
     end)
 end)
+
+net.Receive("RPC_Result", function (len, ply)
+    local id = net.ReadString()
+    local result = net.ReadObject()
+
+    local p = RPC.Requests[id]
+    assert(p, "Invalid RPC request: " .. id)
+
+    if SERVER and p.Player ~= ply then
+       error("RPC sent by " .. tostring(p.Player) .. ", but response came from " .. tostring(ply)) 
+    end
+
+    p:Complete(unpack(result))
+end)
+
+if SERVER then
+    net.Receive("RPC", function (len, ply)
+        local id = net.ReadString()
+        local name = net.ReadString()
+        local data = net.ReadObject()
+
+        local rpc = RPC.Get(name)
+        assert(rpc, "Player " .. tostring(ply) .. " sent an invalid RPC (" .. name .. ").")
+        
+        local result = { rpc:GetFunc()(ply, unpack(data)) }
+        if ispromise(result[1]) then
+            result[1]:Hook(function (succ, ...)
+                if not succ then
+                    error(select(2, ...))
+                end
+
+                local result = {...}
+                net.Start("RPC_Result")
+                    net.WriteString(id)
+                    net.WriteObject(result)
+                net.Send(ply)
+            end)
+        else
+            net.Start("RPC_Result")
+                net.WriteString(id)
+                net.WriteObject(result)
+            net.Send(ply)
+        end
+
+    end)
+    util.AddNetworkString("RPC")
+    util.AddNetworkString("RPC_Result")
+end
