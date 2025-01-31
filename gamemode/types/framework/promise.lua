@@ -129,7 +129,11 @@ do
 
     -- @test sh_tests/Promises
     function Promise.Metamethods:__tostring()
-        return "Promise[" .. self:GetId() .. "](" .. coroutine.status(self:GetCoroutine()) .. ")"
+        if self:GetCoroutine() then
+            return "Promise[" .. self:GetId() .. "](" .. coroutine.status(self:GetCoroutine()) .. ")"
+        else
+            return "Promise[" .. self:GetId() .. "](" .. (self:IsComplete() and "complete" or "pending") .. ")"
+        end
     end
 
     Promise.Prototype.Start = Promise.Prototype.Resume

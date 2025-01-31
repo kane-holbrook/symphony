@@ -1,12 +1,15 @@
 Database = {}
-Database.Tables = {}
 
-require("mysqloo")
-if not mysqloo then
-    error("MySQLOO failed to load.")
+local query = Type.Register("Query", Type.Promise)
+query:CreateProperty("Query")
+
+function query.Prototype:wait()
+    self:GetQuery():wait()
+    return self
 end
 
 function Database.Connect()
+    
     local credentials = util.JSONToTable(file.Read("symphony/mysql.json", "DATA") or "{}") 
 
     local host = credentials.host
@@ -14,89 +17,105 @@ function Database.Connect()
     local pass = credentials.pass
     local db = credentials.db
 
-    hndl = mysqloo.connect(host, user, pass, db)
+    Database.hndl = mysqloo.connect(host, user, pass, db)
     
-    function hndl:onConnected()
+    function Database.hndl:onConnected()
         print("Connected to the database.")
-        Database.hndl = hndl
-
-        sym.OnDatabaseConnected:Invoke()
 
         -- Create the tables
         local p = Database.Query("SHOW TABLES;")
-        p.query:wait()
+        p:wait()
 
         local existing = {}
         for k, v in pairs(p:GetResult()) do
             local t = tablex.GetFirst(v)
             existing[t] = true
         end
-        print("FOUND_EXISTING_TABLES", table.concat(table.GetKeys(existing), ";"))
         Database.Tables = existing
 
         for k, v in pairs(Type.GetAll()) do
-            v:CreateDatabaseTable(existing)
+            v:CreateDatabaseTable()
         end
-        
-        sym.OnSetupDatabase:Invoke()
     end
 
-    function hndl:onConnectionFailed(err)
-        sym.error("Failed to connect to the database: " .. err)
-        error("Fatal error in database connect")
+    function Database.hndl:onConnectionFailed(err)
+        error("Failed to connect to database:" .. err)
         Database.hndl = false
-        Database.err = err
+        Database.Error = err
         return false
     end
 
-    hndl:connect()
-    hndl:wait()
+    Database.hndl:connect()
+    Database.hndl:wait()
+
+    hook.Run("Database.Connected")
 end
 
-function Database.Query(query, p, bManualStart)
-    local p = p or Promise.Create()
+function Database.Query(q)
+    assert(Database.hndl, "Database not yet connected")
 
-    print("QUERY", query)
-    if not Database.hndl then
-        print("QRY_DELAY", "Database not yet connected. Scheduling...")
-        sym.OnDatabaseConnected:Hook(function (ev)
-            Database.Query(query, p)
-        end)
-        return p
-    end
-
-    local q = Database.hndl:query(query)
+    local p = Type.New(Type.Query)
+    p:SetTTL(30)
     
+    local q = Database.hndl:query(q)
     function q:onSuccess(data)
-        print("QRY_RESULT", "Query ran successfully. Rows returned: ", #data)
         p:Complete(data)
     end
 
-    function q:onError(err, sql)
+    function q:onError(err)
         p:ThrowError(err)
-
-        sym.error("MySQL error: ", FromPrimitive(err))
-        sym.debug("MYSQL_ERROR", sql)
+        error(err)
     end
-
-    if not bManualStart then
-        q:start()
-    end
-
-    p.query = q
+    p:SetQuery(q)
+    q:start()
 
     return p
-end 
+end
+
+function Database.Escape(str)
+    return Database.hndl:escape(str)
+end
+
+
+-- Disposable
+-- UUID
+-- CREATE TABLE/ALTER TABLE
+-- Insert
+-- Delete
+-- Update
+-- Select
 
 
 
-hook.Add("Test.Register", "Database", function ()
-end)
+local TRANS = Type.Register("DatabaseTransaction", Type.Disposable)
+TRANS:CreateProperty("Open")
+TRANS:CreateProperty("Trace")
 
-if SERVER then
-    net.Receive("Test.Database", function (len, ply)
-        local query = net.ReadString()
-        Database.Query(query):wait()
-    end)
-    util.AddNetworkString("Test.Database")
+function TRANS.Prototype:Initialize()
+    self:SetOpen(true)
+    self:SetTrace(debug.traceback())
+    Database.Query("START TRANSACTION WITH CONSISTENT SNAPSHOT;")
+end
+
+function TRANS.Prototype:Rollback()
+    Database.Query("ROLLBACK;")
+    self:SetOpen(false)
+    self:Dispose()
+end
+
+function TRANS.Prototype:Commit()
+    Database.Query("COMMIT;")
+    self:SetOpen(false)
+    self:Dispose()
+end
+
+function TRANS.Prototype:Dispose()
+    if self:GetOpen() then
+        self:Rollback()
+        error("Transaction garbage collected without being closed; rolling back. Remember to do trans:Commit()! Initially created: " .. self:GetTrace())
+    end
+end
+
+function Database.CreateTransaction()
+    return Type.New(TRANS)
 end

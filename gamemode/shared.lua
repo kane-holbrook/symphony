@@ -70,7 +70,6 @@ IncludeEx("types/framework/primitives.lua", Realm.Shared)
 IncludeEx("types/framework/promise.lua", Realm.Shared)
 IncludeEx("types/framework/rpc.lua", Realm.Shared)
 IncludeEx("types/framework/datetime.lua", Realm.Shared)
-IncludeEx("types/sv_database.lua", Realm.Server)
 IncludeEx("core/sv_database.lua", Realm.Server)
 IncludeEx("core/sh_tests.lua", Realm.Shared)
 
@@ -82,3 +81,68 @@ IncludeEx("core/sh_tests.lua", Realm.Shared)
 -- core/sh_usergroups.lua
 -- core/sh_messages.lua !!
 -- core/ui/* !!
+
+--[[
+if IsValid(ws) then
+    ws:Remove()
+end
+
+ws = vgui.Create("DHTML")
+ws:SetPaintedManually(true)
+print("boop")
+ws:SetHTML([[
+    <html>
+    <head>
+        <script>
+            function startStreaming() {
+                fetch("http://sstrp.net:3000/stream")
+                    .then(response => {
+                        const reader = response.body.getReader();
+
+                        function readChunk() {
+                            reader.read().then(({ done, value }) => {
+                                if (done) {
+                                    console.log("Stream ended.");
+                                    return;
+                                }
+
+                                console.log("Received chunk:" + value); // Print raw binary chunk
+
+                                readChunk(); // Keep reading until done
+                            });
+                        }
+
+                        console.log("stream")
+
+                        readChunk();
+                    })
+                    .catch(error => console.error("Fetch error:", error));
+            }
+
+            window.onload = startStreaming;
+        </script>
+    </head>
+    <body>
+        <h2>Streaming Binary Data...</h2>
+    </body>
+    </html>
+
+--]]--)
+--[[
+-- Function to send messages via WebSocket
+function SendWebSocketMessage(msg)
+    if IsValid(ws) then ws:RunJavascript("sendMessage(" .. util.TableToJSON(msg) .. ");") end
+end
+
+-- Hook for receiving messages from WebSocket
+ws:AddFunction("gmod", "receive", function(event, data)
+    if event == "ws_ready" then
+        print("[WebSocket] Connected and ready!")
+    elseif event == "ws_message" then
+        print("[WebSocket] Received:", data)
+    elseif event == "ws_closed" then
+        print("[WebSocket] Disconnected.")
+    elseif event == "ws_error" then
+        print("[WebSocket] Error:", data)
+    end
+end)--]]

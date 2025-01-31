@@ -50,6 +50,11 @@ do
 
 	function TYPE:New(id)
 		local t = {}
+		self:Apply(t, id)
+		return t
+	end
+
+	function TYPE:Apply(t, id)
 		local mt = table.Copy(self.Metamethods)
 		mt.Id = id or uuid()
 		mt.Type = self
@@ -63,6 +68,9 @@ do
 		setmetatable(t, mt)
 		self.InstanceCount = self.InstanceCount + 1
 		self.Instances[self.InstanceCount] = t
+
+		Type.Instances[t:GetId()] = t
+
 		t:Invoke("Initialize")
 		return t
 	end
@@ -86,90 +94,6 @@ do
 		return TYPE
 	end
 
-	function TYPE:CreateDatabaseTable(tables)
-		local name = self:GetOptions().DatabaseTable
-		if not name then
-			return
-		end
-		
-		local key = string.lower(self:GetDatabaseKey())
-
-		local qry
-		local fieldSQL = {}
-		if not tables[name] then
-			local sorted = table.ClearKeys(self:GetPropertyMetadata())
-			table.SortByMember(sorted, "index", true)
-
-			for k, f in pairs(sorted) do
-				local opt = f:GetOptions()
-				if opt.Transient then
-					continue
-				end
-
-				local i = {}
-				local fname = f:GetName()
-				i[1] = "`" .. hndl:escape(fname) .. "`"
-				i[2] = hndl:escape(f:GetPropertyType().__dbtype)
-
-				if opt.not_null then
-					table.insert(i, "NOT NULL")
-				end
-
-				if opt.auto_increment then
-					table.insert(i, "AUTO_INCREMENT")
-				end
-
-				if string.lower(fname) == key then
-					table.insert(i, "PRIMARY KEY")
-				end
-
-				if opt.field_options then
-					table.insert(i, opt.field_options)
-				end
-
-				table.insert(fieldSQL, table.concat(i, " "))
-			end
-
-			qry = "CREATE TABLE `" .. hndl:escape(name) .. "` (\n\t" .. table.concat(fieldSQL, ",\n\t") .. "\n)"
-			print("CREATE_TABLE", "Creating MySQL table for type ", FromPrimitive(stringex.TitleCase(self:GetTypeName())), color_white, ":\n", FromPrimitive(qry))
-
-			local p = sym.db.Query(qry)
-			p.query:wait()
-		else
-			for k, f in pairs(self:GetPropertyMetadata()) do
-				local opt = f:GetOptions()
-				if opt.Transient then
-					continue
-				end
-
-				local i = {}
-				local fname = f:GetName()
-				i[1] = "`" .. hndl:escape(fname) .. "`"
-				i[2] = hndl:escape(f:GetPropertyType().__dbtype)
-
-				if opt.not_null then
-					table.insert(i, "NOT NULL")
-				end
-
-				if string.lower(fname) == key then
-					table.insert(i, "PRIMARY KEY")
-				end
-
-				if opt.field_options then
-					table.insert(i, opt.field_options)
-				end
-				
-				table.insert(fieldSQL, "ADD COLUMN IF NOT EXISTS (" .. table.concat(i, " ") .. ")")
-
-			end
-			
-			qry = "ALTER TABLE `" .. hndl:escape(name) .. "` \n\t" .. table.concat(fieldSQL, ",\n\t")
-			sym.debug("ALTER_TABLE", "Adjusting MySQL table for type ", FromPrimitive(stringex.TitleCase(self:GetTypeName())))
-
-			local p = sym.db.Query(qry)
-			p.query:wait()
-		end
-	end
 
 	-- @test Type.Register
 	function TYPE:__tostring()
@@ -257,7 +181,7 @@ do
 		return self.Derivatives
 	end
 
-	TYPE.Options = {}
+	TYPE.Options = { DatabaseType = "JSON" }
 	function TYPE:GetOptions()
 		return self.Options
 	end
@@ -272,6 +196,106 @@ do
 		end
 		return obj
 	end
+
+	-- Database
+	function TYPE:GetDatabaseTable()
+		return self:GetOptions().Table
+	end
+
+	function TYPE:GetDatabaseKey()
+		return self:GetOptions().Key or "Id"
+	end
+
+	function TYPE:CreateDatabaseTable()
+		local name = self:GetOptions().Table
+		if not name then
+			return
+		end
+		
+		local key = string.lower(self:GetDatabaseKey())
+
+		local qry
+		local fieldSQL = {}
+		if not Database.Tables[name] then
+			if self:GetDatabaseKey() == "Id" then
+				table.insert(fieldSQL, "Id UUID")
+			end
+
+			for k, f in pairs(self:GetProperties()) do
+				local opt = f.Options or {}
+				if opt.Transient then
+					continue
+				end
+
+
+				local i = {}
+				local fname = f.Name
+				i[1] = "`" .. Database.Escape(fname) .. "`"
+				i[2] = Database.Escape(f.Type:GetOptions().DatabaseType)
+
+				if opt.not_null then
+					table.insert(i, "NOT NULL")
+				end
+
+				if opt.auto_increment then
+					table.insert(i, "AUTO_INCREMENT")
+				end
+
+				if string.lower(fname) == key then
+					table.insert(i, "PRIMARY KEY")
+				end
+
+				table.insert(fieldSQL, table.concat(i, " "))
+			end
+
+			qry = "CREATE TABLE `" .. Database.Escape(name) .. "` (\n\t" .. table.concat(fieldSQL, ",\n\t") .. "\n)"
+			print(qry)
+
+			local p = Database.Query(qry)
+			p:wait()
+
+			Database.Tables[name] = self
+		else
+			for k, f in pairs(self:GetProperties()) do
+				local opt = f.Options or {}
+				if opt.Transient then
+					continue
+				end
+
+				local i = {}
+				local fname = f.Name
+				i[1] = "`" .. Database.Escape(fname) .. "`"
+				i[2] = Database.Escape(f.Type.DatabaseType)
+
+				if opt.not_null then
+					table.insert(i, "NOT NULL")
+				end
+
+				if string.lower(fname) == key then
+					table.insert(i, "PRIMARY KEY")
+				end
+
+				if opt.field_options then
+					table.insert(i, opt.field_options)
+				end
+				
+				table.insert(fieldSQL, "ADD COLUMN IF NOT EXISTS (" .. table.concat(i, " ") .. ")")
+
+			end
+			
+			qry = "ALTER TABLE `" .. Database.Escape(name) .. "` \n\t" .. table.concat(fieldSQL, ",\n\t")
+			
+			local p = Database.Query(qry)
+			p:wait()
+
+			Database.Tables[name] = self
+		end
+	end
+
+	function TYPE:Select()
+		-- @todo
+	end
+	-- Accounts.Select():where("32"):limit(1)
 
 	-- Registering us
 	Type.ByName.Type = TYPE -- @test Type.Register
@@ -374,16 +398,17 @@ do
 		return out
 	end
 
-	--function OBJ:Serialize(ply)
-	--	local out = self:GetProperties()
-	--	return out
-	--end
+	function OBJ:DbUpdate()
+		-- @todo
+	end
 
-	--function OBJ:Deserialize(data)
-	--	for k, v in pairs(data) do
-	--		self:SetProperty(k, v)
-	--	end
-	--end
+	function OBJ:DbInsert()
+		-- @todo
+	end
+
+	function OBJ:DbDelete()
+		-- @todo
+	end
 end
 
 -- Statics
@@ -593,6 +618,81 @@ do
 	end
 end
 
+-- Disposable
+local DISP = Type.Register("Disposable")
+do
+	function DISP.Prototype:Initialize()
+		base()
+		local mt = getmetatable(self)
+		mt.userdata = newproxy(true)
+		getmetatable(mt.userdata).__gc = function ()
+			print("Dispose GC")
+			self:Dispose()
+		end
+		print("Init")
+	end
+
+	function DISP.Prototype:Dispose()
+		print("Disposed")
+	end
+
+end
+-- UUID
+--[[
+local UUID = Type.Register("UUID")
+do
+	UUID:CreateProperty("Bytes")
+
+	function UUID:Apply(t, id)
+		local mt = table.Copy(self.Metamethods)
+		mt.Id = nil -- UUIDs do not have an ID.
+		mt.Type = self
+		
+		local super = self:GetSuper()
+		mt.Base = super.Prototype
+		mt.__index = mt -- The object should point at this metatable (so the object itself can remain clean).
+		setmetatable(mt, {
+			__index = self.Prototype -- However, if keys aren't found on the MT, they should be pulled from the proto.
+		})
+
+		setmetatable(t, mt)
+
+		-- We don't add UUIDs to the instances.
+		
+		t:Invoke("Initialize")
+		return t
+	end
+
+	function UUID:Initialize()
+		self:SetBytes({math.random() * 0xFFFFFFFF, math.random() * 0xFFFFFFFF, math.random() * 0xFFFFFFFF, math.random() * 0xFFFFFFFF})
+	end
+
+	function UUID:Serialize(obj, ply)
+		return obj:GetBytes()
+	end
+
+	function UUID:Deserialize(obj, data)
+		obj:SetBytes(data)
+		return obj
+	end
+
+	function UUID.DbEncode(value)
+		return tostring(value)
+	end
+
+	function UUID.Metamethods:__tostring()
+		if self.Cache then
+			return self.Cache
+		end
+
+		local data1 = self:GetBytes()[1]
+		local data2 = self:GetBytes()[2]
+		local data3 = self:GetBytes()[3]
+		local data4 = self:GetBytes()[4]
+		
+		return string.format("%08x-%04x-%04x-%04x-%08x%04x", data1, bit.rshift(data2, 16), bit.band(data2, 0xFFFF), bit.rshift(data3, 16), bit.band(data3, 0xFFFF), bit.rshift(data4, 16), bit.band(data4, 0xFFFF))
+	end
+end--]]
 
 local TEST_NET_PROMISE
 hook.Add("Test.Register", "Types", function ()			
@@ -770,8 +870,42 @@ hook.Add("Test.Register", "Types", function ()
 		collectgarbage("collect")
 	end)
 
-	root:AddTest("Database", function ()
-		error("Not implemented", 2)
+	RPC.Register("Test.Types.Database", Realm.Server, function ()
+		return pcall(function ()
+			assert(Database.hndl, "No database")
+
+			Database.Query("DROP TABLE IF EXISTS `test_object`"):wait()
+
+			local t = Type.Register("TEST_OBJECT", nil, { Table = "test_object", PrimaryKey = "Id" })
+			t:CreateProperty("String", Type.String)
+			
+			t:CreateDatabaseTable()
+			
+			local r = Database.Query("SHOW CREATE TABLE `test_object`"):wait():GetResult()
+			
+			Test.Equals(r[1]["Create Table"], [[CREATE TABLE `test_object` (
+  `Id` uuid DEFAULT NULL,
+  `String` text DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci]])
+
+			t:CreateProperty("Number", Type.Number)
+			t:CreateProperty("Boolean", Type.Boolean)
+			t:CreateProperty("Table", Type.Table)
+
+			-- UUIDs.
+
+
+			Type.ByName["TEST_OBJECT"] = nil
+			collectgarbage("collect")
+			return true
+		end)
+	end)
+
+	Test.Register("Database", function ()
+		
+		local succ, msg = RPC.Call("Test.Types.Database"):Await()
+		assert(succ, msg)
+		
 	end)
 end)
 
