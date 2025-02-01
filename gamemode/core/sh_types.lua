@@ -304,13 +304,15 @@ do
 			value = field
 			field = self:GetDatabaseKey()
 		end
+		
+		
+		local qry 
+		if field then
+			qry = "SELECT * FROM `" .. Database.Escape(self:GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(field) .. "` = " .. Type.GetType(value):DatabaseEncode(value)
+		else
+			qry = "SELECT * FROM `" .. Database.Escape(self:GetDatabaseTable()) .. "`"
+		end
 
-		assert(field, "No field provided")
-		assert(value, "No value provided")
-		
-		
-		local qry = "SELECT * FROM `" .. Database.Escape(self:GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(field) .. "` = " .. Type.GetType(value):DatabaseEncode(value)
-		
 		local data = Database.Query(qry):Await()
 		local out = {}
 
