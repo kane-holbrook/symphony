@@ -23,7 +23,7 @@ local function GenerateIndexer(t)
             return v
         end
 
-        error("Attempt to index a " .. type(self) .. " value.", 2)
+        error("Attempt to index a " .. type(self) .. " value (" .. tostring(key) .. ").", 2)
     end
 end
 
@@ -32,7 +32,7 @@ function STRING.Parse(value)
     return tostring(value)
 end
 
-function STRING.DbEncode(value)
+function STRING:DatabaseEncode(value)
     return string.format("%q", value)
 end
 PopulateMetaTable(string, STRING)
@@ -43,8 +43,12 @@ function NUMBER.Parse(value)
     return tonumber(value)
 end
 
-function NUMBER.DbEncode(value)
+function NUMBER:DatabaseEncode(value)
     return tostring(value)
+end
+
+function NUMBER:DatabaseDecode(value)
+    return tonumber(value)
 end
 debug.setmetatable(32, { __index = GenerateIndexer(NUMBER.Prototype), Type = NUMBER })
 
@@ -60,7 +64,7 @@ function BOOLEAN.Parse(value)
     return nil
 end
 
-function BOOLEAN.DbEncode(value)
+function BOOLEAN:DatabaseEncode(value)
     return value and "true" or "false"
 end
 debug.setmetatable(true, { __index = GenerateIndexer(BOOLEAN.Prototype), Type = BOOLEAN })
@@ -71,7 +75,7 @@ function NIL.Parse(value)
     return nil
 end
 
-function NIL.DbEncode(value)
+function NIL:DatabaseEncode(value)
     return "NULL"
 end
 debug.setmetatable(nil, { __index = GenerateIndexer(NIL.Prototype), Type = NIL })
@@ -87,7 +91,7 @@ function VECTOR.Parse(value)
     return Vector(tonumber(x), tonumber(y), tonumber(z))
 end
 
-function VECTOR.DbEncode(value)
+function VECTOR:DatabaseEncode(value)
     return string.format("\"(%.2f,%.2f,%.2f)\"", value.x, value.y, value.z)
 end
 PopulateMetaTable(FindMetaTable("Vector"), VECTOR)
@@ -99,7 +103,7 @@ function ANGLE.Parse(value)
     return Angle(tonumber(p), tonumber(y), tonumber(r))
 end
 
-function ANGLE.DbEncode(value)
+function ANGLE:DatabaseEncode(value)
     return string.format("\"(%.2f,%.2f,%.2f)\"", value.p, value.y, value.r)
 end
 PopulateMetaTable(FindMetaTable("Angle"), ANGLE)
@@ -111,7 +115,7 @@ function COLOR.Parse(value)
     return Color(tonumber(r), tonumber(g), tonumber(b), tonumber(a))
 end
 
-function COLOR.DbEncode(value)
+function COLOR:DatabaseEncode(value)
     return string.format("\"(%d,%d,%d,%d)\"", value.r, value.g, value.b, value.a)
 end
 PopulateMetaTable(FindMetaTable("Color"), COLOR)
@@ -122,7 +126,7 @@ function MATRIX.Parse(value)
     return Matrix(util.JSONToTable(value))
 end
 
-function MATRIX.DbEncode(value)
+function MATRIX:DatabaseEncode(value)
     return string.format("%q", util.TableToJSON(value:ToTable()))
 end
 PopulateMetaTable(FindMetaTable("VMatrix"), MATRIX)
@@ -144,8 +148,12 @@ function TABLE.Parse(value)
     return util.JSONToTable(value)
 end
 
-function TABLE.DbEncode(value)
+function TABLE:DatabaseEncode(value)
     return string.format("%q", util.TableToJSON(value))
+end
+
+function TABLE:DatabaseDecode()
+    return util.JSONToTable(value)
 end
 
 
@@ -191,16 +199,16 @@ hook.Add("Test.Register", "Primitives", function ()
         Test.Equals(MATRIX.Parse("{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}"), Matrix({{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}))
         Test.Equals(TABLE.Parse("{\"a\": 1}").a, 1)
 
-        Test.Equals(STRING.DbEncode("Hello"), "\"Hello\"")
-        Test.Equals(NUMBER.DbEncode(32), "32")
-        Test.Equals(BOOLEAN.DbEncode(true), "true")
-        Test.Equals(BOOLEAN.DbEncode(false), "false")
-        Test.Equals(NIL.DbEncode(nil), "NULL")
-        Test.Equals(VECTOR.DbEncode(Vector(1, 2, 3)), "\"(1.00,2.00,3.00)\"")
-        Test.Equals(ANGLE.DbEncode(Angle(1, 2, 3)), "\"(1.00,2.00,3.00)\"")
-        Test.Equals(COLOR.DbEncode(Color(1, 2, 3, 4)), "\"(1,2,3,4)\"")
-        Test.Equals(MATRIX.DbEncode(Matrix({{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}})), "\"[[1.0,0.0,0.0,0.0],[0.0,1.0,0.0,0.0],[0.0,0.0,1.0,0.0],[0.0,0.0,0.0,1.0]]\"")
-        Test.Equals(TABLE.DbEncode({a = 1}), [["{\"a\":1.0}"]])
+        Test.Equals(STRING:DatabaseEncode("Hello"), "\"Hello\"")
+        Test.Equals(NUMBER:DatabaseEncode(32), "32")
+        Test.Equals(BOOLEAN:DatabaseEncode(true), "true")
+        Test.Equals(BOOLEAN:DatabaseEncode(false), "false")
+        Test.Equals(NIL:DatabaseEncode(nil), "NULL")
+        Test.Equals(VECTOR:DatabaseEncode(Vector(1, 2, 3)), "\"(1.00,2.00,3.00)\"")
+        Test.Equals(ANGLE:DatabaseEncode(Angle(1, 2, 3)), "\"(1.00,2.00,3.00)\"")
+        Test.Equals(COLOR:DatabaseEncode(Color(1, 2, 3, 4)), "\"(1,2,3,4)\"")
+        Test.Equals(MATRIX:DatabaseEncode(Matrix({{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}})), "\"[[1.0,0.0,0.0,0.0],[0.0,1.0,0.0,0.0],[0.0,0.0,1.0,0.0],[0.0,0.0,0.0,1.0]]\"")
+        Test.Equals(TABLE:DatabaseEncode({a = 1}), [["{\"a\":1.0}"]])
 
     end)
 end)

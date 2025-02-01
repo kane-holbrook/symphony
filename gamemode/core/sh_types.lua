@@ -1,4 +1,4 @@
-Type = Type or {}
+Type = {}
 Type.ByName = {} -- @test Type.Register
 Type.ByCode = weaktable(false, true) -- @test Type.Register
 Type.Instances = weaktable(false, true) -- @test Type.Register
@@ -93,7 +93,6 @@ do
 	function TYPE:GetType()
 		return TYPE
 	end
-
 
 	-- @test Type.Register
 	function TYPE:__tostring()
@@ -249,7 +248,6 @@ do
 			end
 
 			qry = "CREATE TABLE `" .. Database.Escape(name) .. "` (\n\t" .. table.concat(fieldSQL, ",\n\t") .. "\n)"
-			print(qry)
 
 			local p = Database.Query(qry)
 			p:wait()
@@ -265,7 +263,7 @@ do
 				local i = {}
 				local fname = f.Name
 				i[1] = "`" .. Database.Escape(fname) .. "`"
-				i[2] = Database.Escape(f.Type.DatabaseType)
+				i[2] = Database.Escape(f.Type:GetOptions().DatabaseType)
 
 				if opt.not_null then
 					table.insert(i, "NOT NULL")
@@ -292,8 +290,24 @@ do
 		end
 	end
 
+	function TYPE:DatabaseEncode(obj)
+		return util.TableToJSON(Type.Serialize(obj))
+	end
+
+	function TYPE:DatabaseDecode(data)
+		return Type.Deserialize(util.JSONToTable(data))
+	end
+
 	function TYPE:Select()
-		-- @todo
+		
+		local qry = "SELECT * FROM `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "`"
+		local data = Database.Query(qry):Await()
+
+		local props = self:GetType():GetPropertiesMap()
+		for k, v in pairs(data) do
+			self:SetProperty(k, props[k].Type:DatabaseDecode(v))
+		end
+		-- @Todo: Complete 
 	end
 	-- Accounts.Select():where("32"):limit(1)
 
@@ -367,6 +381,11 @@ do
 		return self[name]
 	end
 
+	function OBJ:GetLastRefresh()
+		local mt = getmetatable(self)
+		return mt.LastRefresh
+	end
+
 	-- @test Type.New
 	function OBJ:Invoke(event, ...)
 		if IsPrimitive(self, true) then
@@ -398,16 +417,85 @@ do
 		return out
 	end
 
-	function OBJ:DbUpdate()
-		-- @todo
+	function OBJ:Refresh()
+		return Promise.Run(function ()
+			local qry = "SELECT * FROM `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(self:GetType():GetDatabaseKey()) .. "` = " .. Type.GetType(self:GetId()):DatabaseEncode(self:GetId()) .. " LIMIT 1"
+			local data = Database.Query(qry):Await()
+
+			print(qry)
+			print("Data")
+
+			if not data[1] then
+				error("No data found for " .. self:GetType():GetName() .. " with ID " .. self:GetId())
+			end
+			PrintTable(data[1])
+
+			local props = self:GetType():GetPropertiesMap()
+			for k, v in pairs(data[1]) do
+				print(k)
+				local p = props[k]
+				print("Prop", k, p:DatabaseDecode(v))
+				if not p then
+					continue
+				end
+
+				self:SetProperty(k, p:DatabaseDecode(v))
+			end
+			self.LastRefresh = CurTime()
+		end)
 	end
 
-	function OBJ:DbInsert()
-		-- @todo
+	function OBJ:Commit()
+
+		if not self:GetLastRefresh() then
+			-- Insert
+			local mt = getmetatable(self)
+			local fields = {}
+			local values = {}
+
+			if self:GetType():GetDatabaseKey() == "Id" then
+				table.insert(fields, "`Id`")
+				table.insert(values, string.format("%q", self:GetId()))
+			end
+
+			for k, v in pairs(self:GetProperties()) do
+				table.insert(fields, "`" .. Database.Escape(k) .. "`")
+				table.insert(values, Type.GetType(v):DatabaseEncode(v))
+			end
+
+			local qry = "INSERT INTO `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "` (" .. table.concat(fields, ", ") .. ") VALUES (" .. table.concat(values, ", ") .. ")"
+			mt.LastRefresh = CurTime()
+
+			return Database.Query(qry)
+		else
+			-- Update
+			local mt = getmetatable(self)
+			local kvp = {}
+
+			local key = self:GetType():GetDatabaseKey()
+			local id = self[key]
+
+			for k, v in pairs(self:GetProperties()) do
+				table.insert(kvp, "`" .. Database.Escape(k) .. "` = " .. Type.GetType(v):DatabaseEncode(v))
+			end
+
+			local qry = "UPDATE `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "` SET " .. table.concat(kvp, ", ") .. " WHERE `" .. Database.Escape(key) .. "` = " .. Type.GetType(id):DatabaseEncode(id)
+			mt.LastRefresh = CurTime()
+
+			return Database.Query(qry)
+		end
 	end
 
-	function OBJ:DbDelete()
-		-- @todo
+	function OBJ:DeleteFromDatabase()
+		assert(self:GetLastRefresh())
+
+		local mt = getmetatable(self)
+		local key = self:GetType():GetDatabaseKey()
+		local id = self[key]
+
+		local qry = "DELETE FROM `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(key) .. "` = " .. Type.GetType(id):DatabaseEncode(id)
+		self.LastRefresh = nil
+		return Database.Query(qry)
 	end
 end
 
@@ -458,6 +546,11 @@ do
 		hook.Run("Type.Register", t)
 
 		return t
+	end
+
+	function Type.Unregister(type)
+		Type.ByName[type:GetName()] = nil
+		Type.ByCode[type:GetCode()] = nil
 	end
 
 	-- @test Type.Register
@@ -637,62 +730,7 @@ do
 	end
 
 end
--- UUID
---[[
-local UUID = Type.Register("UUID")
-do
-	UUID:CreateProperty("Bytes")
 
-	function UUID:Apply(t, id)
-		local mt = table.Copy(self.Metamethods)
-		mt.Id = nil -- UUIDs do not have an ID.
-		mt.Type = self
-		
-		local super = self:GetSuper()
-		mt.Base = super.Prototype
-		mt.__index = mt -- The object should point at this metatable (so the object itself can remain clean).
-		setmetatable(mt, {
-			__index = self.Prototype -- However, if keys aren't found on the MT, they should be pulled from the proto.
-		})
-
-		setmetatable(t, mt)
-
-		-- We don't add UUIDs to the instances.
-		
-		t:Invoke("Initialize")
-		return t
-	end
-
-	function UUID:Initialize()
-		self:SetBytes({math.random() * 0xFFFFFFFF, math.random() * 0xFFFFFFFF, math.random() * 0xFFFFFFFF, math.random() * 0xFFFFFFFF})
-	end
-
-	function UUID:Serialize(obj, ply)
-		return obj:GetBytes()
-	end
-
-	function UUID:Deserialize(obj, data)
-		obj:SetBytes(data)
-		return obj
-	end
-
-	function UUID.DbEncode(value)
-		return tostring(value)
-	end
-
-	function UUID.Metamethods:__tostring()
-		if self.Cache then
-			return self.Cache
-		end
-
-		local data1 = self:GetBytes()[1]
-		local data2 = self:GetBytes()[2]
-		local data3 = self:GetBytes()[3]
-		local data4 = self:GetBytes()[4]
-		
-		return string.format("%08x-%04x-%04x-%04x-%08x%04x", data1, bit.rshift(data2, 16), bit.band(data2, 0xFFFF), bit.rshift(data3, 16), bit.band(data3, 0xFFFF), bit.rshift(data4, 16), bit.band(data4, 0xFFFF))
-	end
-end--]]
 
 local TEST_NET_PROMISE
 hook.Add("Test.Register", "Types", function ()			
@@ -770,11 +808,6 @@ hook.Add("Test.Register", "Types", function ()
 		assert(tostring(life) ~= "HUMAN")
 		assert(tostring(bird) ~= "HUMAN")
 
-		Type.ByName["Life"] = nil
-		Type.ByName["Mammal"] = nil
-		Type.ByName["Human"] = nil
-		Type.ByName["Bird"] = nil
-
 		-- Check IDs and OBJ functions.
 		assert(human:GetId() ~= bird:GetId())
 		Test.Equals(human:GetType(), t3)
@@ -782,6 +815,12 @@ hook.Add("Test.Register", "Types", function ()
 		Test.Equals(human:GetBase(), t2.Prototype)
 		Test.Equals(bird:GetBase(), t.Prototype)
 		assert(bird:GetProperties().CanFly == true)
+
+		Type.Unregister(t)
+		Type.Unregister(t2)
+		Type.Unregister(t3)
+		Type.Unregister(t4)
+		Type.Unregister(t5)
 	end)
 
 	root:AddTest("Serialization", function ()
@@ -828,8 +867,7 @@ hook.Add("Test.Register", "Types", function ()
 		Test.Equals(r:GetValue(), 40)
 		Test.Equals(r:GetId(), i2:GetId())--]]
 
-		Type.ByName["TestType"] = nil
-		Type.ByCode[t:GetCode()] = nil
+		Type.Unregister(t)
 	end)
 
 	root:AddTest("Networking", function ()
@@ -865,24 +903,24 @@ hook.Add("Test.Register", "Types", function ()
 
 
 		TEST_NET_PROMISE = nil		
-		Type.ByName["TEST_OBJECT"] = nil
-		Type.ByCode[t:GetCode()] = nil
+		Type.Unregister(t)
 		collectgarbage("collect")
 	end)
 
 	RPC.Register("Test.Types.Database", Realm.Server, function ()
-		return pcall(function ()
+		return Promise.Run(function ()
 			assert(Database.hndl, "No database")
 
 			Database.Query("DROP TABLE IF EXISTS `test_object`"):wait()
+			Database.Tables["test_object"] = nil
 
 			local t = Type.Register("TEST_OBJECT", nil, { Table = "test_object", PrimaryKey = "Id" })
 			t:CreateProperty("String", Type.String)
 			
 			t:CreateDatabaseTable()
 			
-			local r = Database.Query("SHOW CREATE TABLE `test_object`"):wait():GetResult()
-			
+			local r = Database.Query("SHOW CREATE TABLE `test_object`"):Await()
+
 			Test.Equals(r[1]["Create Table"], [[CREATE TABLE `test_object` (
   `Id` uuid DEFAULT NULL,
   `String` text DEFAULT NULL
@@ -892,10 +930,46 @@ hook.Add("Test.Register", "Types", function ()
 			t:CreateProperty("Boolean", Type.Boolean)
 			t:CreateProperty("Table", Type.Table)
 
+ 
+			-- Tests ALTER
+			t:CreateDatabaseTable()
+
+			r = Database.Query("SHOW CREATE TABLE `test_object`"):Await()
+
+			Test.Equals(r[1]["Create Table"], [[CREATE TABLE `test_object` (
+  `Id` uuid DEFAULT NULL,
+  `String` text DEFAULT NULL,
+  `Number` double DEFAULT NULL,
+  `Boolean` tinyint(1) DEFAULT NULL,
+  `Table` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`Table`))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_uca1400_ai_ci]])
+			
+			local i = new(t)
+			i:SetString("Test")
+			i:SetNumber(32)
+			i:SetBoolean(true)
+			i:SetTable({ Hello = "World" })
+
+			i:Commit():Await()
+
+			local i2 = new(t, i:GetId())
+			i2:Refresh():Await()
+			Test.Equals(i2:GetString(), "Test")
+			Test.Equals(i2:GetNumber(), 32)
+			Test.Equals(i2:GetBoolean(), true)
+			Test.Equals(i2:GetTable().Hello, "World")
+			
+
+			-- Update
+			i:SetString("Test2")
+			i:Commit():Await()
+
+			-- Delete
+
 			-- UUIDs.
 
 
-			Type.ByName["TEST_OBJECT"] = nil
+			Type.Unregister(t)
 			collectgarbage("collect")
 			return true
 		end)

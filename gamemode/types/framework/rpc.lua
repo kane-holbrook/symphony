@@ -112,7 +112,7 @@ if SERVER then
         if ispromise(result[1]) then
             result[1]:Hook(function (succ, ...)
                 if not succ then
-                    error(select(2, ...))
+                    error(select(1, ...))
                 end
 
                 local result = {...}

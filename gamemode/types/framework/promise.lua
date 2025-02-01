@@ -49,6 +49,7 @@ do
         err = err .. "\n" .. debug.traceback()
         self.Events:Invoke("Error", err)
         self:SetError(err)
+        ErrorNoHaltWithStack(err)
         return err
     end
 
