@@ -291,25 +291,49 @@ do
 	end
 
 	function TYPE:DatabaseEncode(obj)
-		return util.TableToJSON(Type.Serialize(obj))
+		return "\"" .. Database.Escape(util.TableToJSON(Type.Serialize(obj))) .. "\""
 	end
 
 	function TYPE:DatabaseDecode(data)
 		return Type.Deserialize(util.JSONToTable(data))
 	end
 
-	function TYPE:Select()
-		
-		local qry = "SELECT * FROM `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "`"
-		local data = Database.Query(qry):Await()
+	function TYPE:Select(field, value)
 
-		local props = self:GetType():GetPropertiesMap()
-		for k, v in pairs(data) do
-			self:SetProperty(k, props[k].Type:DatabaseDecode(v))
+		if not value then
+			value = field
+			field = self:GetDatabaseKey()
 		end
-		-- @Todo: Complete 
+
+		assert(field, "No field provided")
+		assert(value, "No value provided")
+		
+		
+		local qry = "SELECT * FROM `" .. Database.Escape(self:GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(field) .. "` = " .. Type.GetType(value):DatabaseEncode(value)
+		
+		local data = Database.Query(qry):Await()
+		local out = {}
+
+
+		for k, v in pairs(data) do
+			local obj = new(self, v["Id"])
+		
+			local props = self:GetPropertiesMap()
+			for k, v in pairs(data[1]) do
+				local p = props[k]
+				if not p then
+					continue
+				end
+
+				obj:SetProperty(k, p.Type:DatabaseDecode(v))
+			end
+			getmetatable(obj).LastRefresh = CurTime()
+
+			out[k] = obj
+		end
+
+		return out
 	end
-	-- Accounts.Select():where("32"):limit(1)
 
 	-- Registering us
 	Type.ByName.Type = TYPE -- @test Type.Register
@@ -422,26 +446,20 @@ do
 			local qry = "SELECT * FROM `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(self:GetType():GetDatabaseKey()) .. "` = " .. Type.GetType(self:GetId()):DatabaseEncode(self:GetId()) .. " LIMIT 1"
 			local data = Database.Query(qry):Await()
 
-			print(qry)
-			print("Data")
-
 			if not data[1] then
 				error("No data found for " .. self:GetType():GetName() .. " with ID " .. self:GetId())
 			end
-			PrintTable(data[1])
 
 			local props = self:GetType():GetPropertiesMap()
 			for k, v in pairs(data[1]) do
-				print(k)
 				local p = props[k]
-				print("Prop", k, p:DatabaseDecode(v))
 				if not p then
 					continue
 				end
 
-				self:SetProperty(k, p:DatabaseDecode(v))
+				self:SetProperty(k, p.Type:DatabaseDecode(v))
 			end
-			self.LastRefresh = CurTime()
+			getmetatable(self).LastRefresh = CurTime()
 		end)
 	end
 
@@ -494,7 +512,7 @@ do
 		local id = self[key]
 
 		local qry = "DELETE FROM `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(key) .. "` = " .. Type.GetType(id):DatabaseEncode(id)
-		self.LastRefresh = nil
+		mt.LastRefresh = nil
 		return Database.Query(qry)
 	end
 end
@@ -954,20 +972,27 @@ hook.Add("Test.Register", "Types", function ()
 
 			local i2 = new(t, i:GetId())
 			i2:Refresh():Await()
+			
 			Test.Equals(i2:GetString(), "Test")
 			Test.Equals(i2:GetNumber(), 32)
 			Test.Equals(i2:GetBoolean(), true)
-			Test.Equals(i2:GetTable().Hello, "World")
-			
+			Test.Equals(i2:GetTable().Hello, "World")			
 
 			-- Update
 			i:SetString("Test2")
 			i:Commit():Await()
 
-			-- Delete
+			i2:Refresh():Await()
 
-			-- UUIDs.
+			Test.Equals(i2:GetString(), "Test2")
 
+			local i3 = t:Select(i:GetId())
+			Test.Equals(#i3, 1)
+			Test.Equals(i3[1]:GetString(), "Test2")
+
+			i2:DeleteFromDatabase():Await()
+
+			Test.Equals(Database.Query("SELECT COUNT(*) FROM `test_object`"):Await()[1]["COUNT(*)"], 0)
 
 			Type.Unregister(t)
 			collectgarbage("collect")

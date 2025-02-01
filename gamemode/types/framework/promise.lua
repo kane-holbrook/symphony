@@ -8,6 +8,7 @@ do
     Promise:CreateProperty("Completed")
     Promise:CreateProperty("TTL")
     Promise:CreateProperty("Error")
+    Promise:CreateProperty("SuppressError")
 
     -- @test sh_tests/Promises
     function Promise.Prototype:Initialize()
@@ -49,7 +50,7 @@ do
         err = err .. "\n" .. debug.traceback()
         self.Events:Invoke("Error", err)
         self:SetError(err)
-        ErrorNoHaltWithStack(err)
+
         return err
     end
 

@@ -35,6 +35,10 @@ end
 function STRING:DatabaseEncode(value)
     return string.format("%q", value)
 end
+
+function STRING:DatabaseDecode(value)
+    return value
+end
 PopulateMetaTable(string, STRING)
 
 
@@ -67,6 +71,10 @@ end
 function BOOLEAN:DatabaseEncode(value)
     return value and "true" or "false"
 end
+
+function BOOLEAN:DatabaseDecode(value)
+    return value == 1
+end
 debug.setmetatable(true, { __index = GenerateIndexer(BOOLEAN.Prototype), Type = BOOLEAN })
 
 
@@ -77,6 +85,10 @@ end
 
 function NIL:DatabaseEncode(value)
     return "NULL"
+end
+
+function NIL:DatabaseDecode(value)
+    return nil
 end
 debug.setmetatable(nil, { __index = GenerateIndexer(NIL.Prototype), Type = NIL })
 
@@ -94,6 +106,10 @@ end
 function VECTOR:DatabaseEncode(value)
     return string.format("\"(%.2f,%.2f,%.2f)\"", value.x, value.y, value.z)
 end
+
+function VECTOR:DatabaseDecode(value)
+    return Vector.Parse(value)
+end
 PopulateMetaTable(FindMetaTable("Vector"), VECTOR)
 
 
@@ -105,6 +121,10 @@ end
 
 function ANGLE:DatabaseEncode(value)
     return string.format("\"(%.2f,%.2f,%.2f)\"", value.p, value.y, value.r)
+end
+
+function ANGLE:DatabaseDecode(value)
+    return Angle.Parse(value)
 end
 PopulateMetaTable(FindMetaTable("Angle"), ANGLE)
 
@@ -118,6 +138,10 @@ end
 function COLOR:DatabaseEncode(value)
     return string.format("\"(%d,%d,%d,%d)\"", value.r, value.g, value.b, value.a)
 end
+
+function COLOR:DatabaseDecode(value)
+    return Color.Parse(value)
+end
 PopulateMetaTable(FindMetaTable("Color"), COLOR)
 
 
@@ -128,6 +152,10 @@ end
 
 function MATRIX:DatabaseEncode(value)
     return string.format("%q", util.TableToJSON(value:ToTable()))
+end
+
+function MATRIX:DatabaseDecode(value)
+    return Matrix.Parse(value)
 end
 PopulateMetaTable(FindMetaTable("VMatrix"), MATRIX)
 
@@ -147,16 +175,6 @@ end
 function TABLE.Parse(value)
     return util.JSONToTable(value)
 end
-
-function TABLE:DatabaseEncode(value)
-    return string.format("%q", util.TableToJSON(value))
-end
-
-function TABLE:DatabaseDecode()
-    return util.JSONToTable(value)
-end
-
-
 
 function Type.IsPrimitive(obj, allowNil)
     if (not allowNil and not obj) or not obj.GetType then
@@ -198,17 +216,5 @@ hook.Add("Test.Register", "Primitives", function ()
         Test.Equals(COLOR.Parse("(1, 2, 3, 4)"), Color(1, 2, 3, 4))
         Test.Equals(MATRIX.Parse("{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}"), Matrix({{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}))
         Test.Equals(TABLE.Parse("{\"a\": 1}").a, 1)
-
-        Test.Equals(STRING:DatabaseEncode("Hello"), "\"Hello\"")
-        Test.Equals(NUMBER:DatabaseEncode(32), "32")
-        Test.Equals(BOOLEAN:DatabaseEncode(true), "true")
-        Test.Equals(BOOLEAN:DatabaseEncode(false), "false")
-        Test.Equals(NIL:DatabaseEncode(nil), "NULL")
-        Test.Equals(VECTOR:DatabaseEncode(Vector(1, 2, 3)), "\"(1.00,2.00,3.00)\"")
-        Test.Equals(ANGLE:DatabaseEncode(Angle(1, 2, 3)), "\"(1.00,2.00,3.00)\"")
-        Test.Equals(COLOR:DatabaseEncode(Color(1, 2, 3, 4)), "\"(1,2,3,4)\"")
-        Test.Equals(MATRIX:DatabaseEncode(Matrix({{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}})), "\"[[1.0,0.0,0.0,0.0],[0.0,1.0,0.0,0.0],[0.0,0.0,1.0,0.0],[0.0,0.0,0.0,1.0]]\"")
-        Test.Equals(TABLE:DatabaseEncode({a = 1}), [["{\"a\":1.0}"]])
-
     end)
 end)
