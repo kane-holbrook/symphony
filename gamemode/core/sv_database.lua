@@ -1,5 +1,7 @@
 Database = {}
 
+require("mysqloo")
+
 local query = Type.Register("Query", Type.Promise)
 query:CreateProperty("Query")
 

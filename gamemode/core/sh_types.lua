@@ -110,7 +110,7 @@ do
 		local prop = {
 			Name = name,
 			Type = type,
-			Options = options
+			Options = options or {}
 		}
 
 		self.Prototype["Set" .. name] = function (self, value)
@@ -221,7 +221,7 @@ do
 			end
 
 			for k, f in pairs(self:GetProperties()) do
-				local opt = f.Options or {}
+				local opt = f.Options
 				if opt.Transient then
 					continue
 				end
@@ -255,7 +255,7 @@ do
 			Database.Tables[name] = self
 		else
 			for k, f in pairs(self:GetProperties()) do
-				local opt = f.Options or {}
+				local opt = f.Options
 				if opt.Transient then
 					continue
 				end
@@ -398,6 +398,11 @@ do
 	end
 
 	function OBJ:SetProperty(name, value)
+		local p = Type.GetType(self):GetPropertiesMap()[name]
+		if p and p.Type and not p.Options.NoValidate then
+			assert(value == nil or Type.GetType(value) == p.Type, "Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName())
+		end
+
 		local old = self[name]
 		self:Invoke("OnPropertyChanged", name, value, old)
 		self[name] = value
@@ -424,7 +429,7 @@ do
 			base__Next = self
 			base__Args = {...}
 
-			self[event](self, self, ...)
+			self[event](self, ...)
 			
 			base__Name = nil
 			base__Source = self

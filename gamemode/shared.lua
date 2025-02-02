@@ -73,6 +73,39 @@ IncludeEx("types/framework/datetime.lua", Realm.Shared)
 IncludeEx("core/sv_database.lua", Realm.Server)
 IncludeEx("core/sh_tests.lua", Realm.Shared)
 
+IncludeEx("core/ui/components/rect.lua", Realm.Shared)
+IncludeEx("core/ui/xml.lua", Realm.Shared)
+
+
+if CLIENT then
+    if IsValid(wp) then
+        wp:Remove()
+    end
+
+    wp = vgui.Create("DFrame")
+    wp:SetSize(800, 600)
+    wp:Center()
+    wp:MakePopup()
+
+    local sp = new(Type.Rect)
+    sp:SetBackground(color_black)
+
+    local sp2 = sp:Add(Type.Rect)
+    sp2:SetBackground(Color(255, 0, 0, 192))
+    sp2:SetX(100)
+    sp2:SetY(100)
+    sp2:SetWidth(100)
+    sp2:SetHeight(100)
+
+    hook.Add("Think", "Test", function()
+        sp2:SetX(100 + TimedCos(1, 0, 100, 0))
+        sp2:SetY(100 + TimedSin(1, 0, 100, 0))
+    end)
+
+    function wp:Paint(w, h)
+        sp:Paint(w, h)
+    end
+end
 
 
 -- core/sh_payloads.lua?
