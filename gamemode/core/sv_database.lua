@@ -121,3 +121,6 @@ end
 function Database.CreateTransaction()
     return Type.New(TRANS)
 end
+
+
+Database.Connect()

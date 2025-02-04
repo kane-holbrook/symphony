@@ -1,7 +1,5 @@
 include("shared.lua")
 
-Database.Connect()
-
 
 --[[concommand.Add("debug", function (ply, cmd, args)
     assert(ply == NULL)

@@ -49,9 +49,7 @@ function sym.Include(path, realm)
         print(path .. "*")
         local files, dirs = file.Find(path .. "*.lua", "LUA")
         
-        PrintTable(files)
         print("Path is a directory")
-        PrintTable(dirs)
         -- Path is a directory
 
         for k, v in pairs(files) do
