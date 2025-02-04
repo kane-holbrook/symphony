@@ -43,6 +43,7 @@ do
     function Promise.Prototype:Unhook(...)
         self.Events:Unhook(...)
     end
+    Promise.Prototype.Then = Promise.Prototype.Hook
 
     -- @test sh_tests/Promises
     function Promise.Prototype:ThrowError(err)
