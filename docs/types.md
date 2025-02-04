@@ -118,7 +118,7 @@ You can query records using Type.Setting.Select, like so:
 ```lua
 -- This fetches ALL rows from the Settings table.
 Type.Setting.Query():Then(function (rows)
-    print(rows[1]:GetKey(), rows[2]:GetValue()) --> Prints: MySetting   A Value
+    print(rows[1]:GetKey(), rows[1]:GetValue()) --> Prints: MySetting   A Value
 end)
 ```
 
