@@ -1,6 +1,11 @@
 AddCSLuaFile()
 
 local PRIMITIVE = Type.Register("Primitive")
+local Deref = false
+
+function PRIMITIVE:Initialize()
+    error("Primitives can't be created via Type.New")
+end
 
 function PRIMITIVE:Serialize(data, ply, root)
     return data
@@ -23,8 +28,18 @@ local function GenerateIndexer(t)
             return v
         end
 
+        if Deref then
+            return nil
+        end
+
         error("Attempt to index a " .. type(self) .. " value (" .. tostring(key) .. ").", 2)
     end
+end
+function deref(f)
+    Deref = true
+    local out = { f() }
+    Deref = false
+    return unpack(out)
 end
 
 local STRING = Type.Register("String", PRIMITIVE, { Code = TYPE_STRING, DatabaseType = "TEXT" })
@@ -55,6 +70,28 @@ function NUMBER:DatabaseDecode(value)
     return tonumber(value)
 end
 debug.setmetatable(32, { __index = GenerateIndexer(NUMBER.Prototype), Type = NUMBER })
+
+
+local FUNCTION = Type.Register("Function", PRIMITIVE, {
+    Code = TYPE_FUNCTION
+})
+
+function FUNCTION.Parse(value)
+    return error("Can't parse a function from a string")
+end
+
+function FUNCTION:DatabaseEncode(value)
+    return error("Cannot encode a function")
+end
+
+function FUNCTION:DatabaseDecode(value)
+    return error("Cannot decode a function")
+end
+
+debug.setmetatable(32, {
+    __index = GenerateIndexer(FUNCTION.Prototype),
+    Type = FUNCTION
+})
 
 
 local BOOLEAN = Type.Register("Boolean", PRIMITIVE, { Code = TYPE_BOOL, DatabaseType = "BOOLEAN" })
@@ -131,12 +168,12 @@ PopulateMetaTable(FindMetaTable("Angle"), ANGLE)
 
 local COLOR = Type.Register("Color", PRIMITIVE, { Code = TYPE_COLOR, DatabaseType = "CHAR(16)" })
 function COLOR.Parse(value)
-    local r, g, b, a = string.match(value, "(%d+),%s*(%d+),%s*(%d+),%s*(%d+)")
+    local r, g, b, a = string.match(value, "(%d+) %s*(%d+) %s*(%d+) %s*(%d+)")
     return Color(tonumber(r), tonumber(g), tonumber(b), tonumber(a))
 end
 
 function COLOR:DatabaseEncode(value)
-    return string.format("\"(%d,%d,%d,%d)\"", value.r, value.g, value.b, value.a)
+    return string.format("\"%d %d %d %d\"", value.r, value.g, value.b, value.a)
 end
 
 function COLOR:DatabaseDecode(value)
@@ -157,6 +194,29 @@ end
 function MATRIX:DatabaseDecode(value)
     return Matrix.Parse(value)
 end
+PopulateMetaTable(FindMetaTable("VMatrix"), MATRIX)
+
+
+
+local PANEL = Type.Register("Panel", PRIMITIVE, {
+    Code = TYPE_PANEL,
+    DatabaseType = "TEXT"
+})
+
+function PANEL.Parse(value)
+    return error("Not implemented")
+end
+
+function PANEL:DatabaseEncode(value)
+    return error("Not implemented")
+    --return string.format("%q", util.TableToJSON(value:ToTable()))
+end
+
+function PANEL:DatabaseDecode(value)
+    return error("Not implemented")
+    --return Matrix.Parse(value)
+end
+
 PopulateMetaTable(FindMetaTable("VMatrix"), MATRIX)
 
 
