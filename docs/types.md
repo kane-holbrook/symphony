@@ -1,5 +1,5 @@
 # Types
-Symphony Types are a Lua-based object-oriented programming (OOP) implementation. They are designed to loosely reflect how Entities in GMod. Types can be networked and written to the database.
+Symphony Types are a Lua-based object-oriented programming (OOP) implementation. They are designed to loosely reflect how Entities look and feel in GMod. Types can be networked and written to the database.
 
 ## Terminology
 - When I use the term *Type*, I mean the metadata associated with a type, such as its name, prototype, static methods, etc.
@@ -28,6 +28,7 @@ local MyType = Type.Register("MyType", Type.ParentType, { Option = "1234" })
 
 In this case, MyType will inherit all the functionality from Type.ParentType, and its parents, all the way up to the prototype of Type itself (which is called an Object).
 
+In keeping to how GMod handles entities, the logic for what happens when an instance of a type is created should be defined in *Type.Prototype:Initialize*.
 
 ### Properties
 Properties define which parts of an instance's data should be networked or stored in the database. 
