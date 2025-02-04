@@ -176,6 +176,7 @@ do
 	
 	-- @test Type.Register
 	TYPE.Derivatives = weaktable(false, true)
+		if s then
 	function TYPE:GetDerivatives()
 		return self.Derivatives
 	end
@@ -567,6 +568,7 @@ do
 
 		-- Inherit from super type
 		setmetatable(t, mt)
+
 
 		hook.Run("Type.Register", t)
 
