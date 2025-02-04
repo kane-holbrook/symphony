@@ -176,7 +176,14 @@ do
 	
 	-- @test Type.Register
 	TYPE.Derivatives = weaktable(false, true)
+
+	function TYPE:OnDerive(child)
+		local s = self:GetSuper()
 		if s then
+			s:OnDerive(child)
+		end
+	end
+
 	function TYPE:GetDerivatives()
 		return self.Derivatives
 	end
@@ -405,8 +412,8 @@ do
 		end
 
 		local old = self[name]
-		self:Invoke("OnPropertyChanged", name, value, old)
 		self[name] = value
+		self:Invoke("OnPropertyChanged", name, value, old)
 	end
 
 	function OBJ:GetProperty(name)
@@ -569,6 +576,7 @@ do
 		-- Inherit from super type
 		setmetatable(t, mt)
 
+		super:OnDerive(t)
 
 		hook.Run("Type.Register", t)
 
@@ -773,6 +781,7 @@ hook.Add("Test.Register", "Types", function ()
 		assert(Type.ByCode[t:GetCode()] == t, "Type not registered in ByCode")
 		assert(Type.Is(t, Type.Type), "Type not derived from Type")
 		
+		
 		local code = t:GetCode()
 		t = nil
 		Type.ByName["TestType"] = nil
@@ -809,6 +818,7 @@ hook.Add("Test.Register", "Types", function ()
 		Test.Equals(t4:GetOptions()["TestOption"], true)
 
 		local t5 = Type.Register("Rock")
+		t5:CreateProperty("TestString", Type.String)
 		assert(not t5:GetOptions()["TestOption"])
 
 		local life = new(t)
@@ -842,6 +852,16 @@ hook.Add("Test.Register", "Types", function ()
 		Test.Equals(human:GetBase(), t2.Prototype)
 		Test.Equals(bird:GetBase(), t.Prototype)
 		assert(bird:GetProperties().CanFly == true)
+
+		-- Test strict typing
+		rock:SetTestString("Hello")
+		local succ, msg = pcall(rock.SetTestString, rock, 32)
+		assert(not succ)
+		assert(string.find(msg, "Property TestString expects String but got Number"))
+
+		t5:GetPropertiesMap()["TestString"].Options.NoValidate = true
+		rock:SetTestString(32)
+
 
 		Type.Unregister(t)
 		Type.Unregister(t2)
