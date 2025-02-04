@@ -295,7 +295,6 @@ function PANEL:PerformLayout(w, h, noSet)
         end
 
         if w ~= env.LastW or h ~= env.LastH then
-            print("Resize", w, env.LastW, h, env.LastH)
             self:SetSize(math.max(w or self:GetWide(), 1), math.max(h or self:GetTall(), 1))
         end
     end
@@ -770,7 +769,7 @@ function PANEL:PaintBackground(w, h)
                 surface.DrawRect(0, 0, w, h)
                 self.BackgroundInit = 0
             else
-                if bg:GetInt("_loading") ~= 1 then
+                if bg.GetInt and bg:GetInt("_loading") ~= 1 then
                     surface.SetMaterial(bg)
                     surface.SetDrawColor(color_white)
                     surface.DrawTexturedRect(0, 0, w, h)
