@@ -4,7 +4,7 @@ if SERVER then
 end 
 
 local BasePanel = FindMetaTable("Panel")
-XPanel = {}
+Rect = {}
 
 --[[
     Properties ✓
@@ -44,8 +44,8 @@ XPanel = {}
 ]]
 
 local PANEL = {}
-PANEL.IsXPanel = true
-PANEL.IsXVGUI = true
+PANEL.IsRect = true
+PANEL.SymInitialized = true
 
 function PANEL:Init()
     self.Uuid = uuid()
@@ -56,7 +56,7 @@ function PANEL:Init()
     self:SetProperty("Flex", 7)
     self:SetProperty("Direction", "X")
 end
-XPanel.Init = PANEL.Init
+Rect.Init = PANEL.Init
 
 function PANEL:SetProperty(name, value)
     assert(name, "Must provide a property name")
@@ -98,7 +98,7 @@ function PANEL:SetProperty(name, value)
     self.Properties[name] = p
     self.PropertyCache[name] = nil
 end
-XPanel.SetProperty = PANEL.SetProperty
+Rect.SetProperty = PANEL.SetProperty
 
 local empty = {}
 function PANEL:GetProperty(name, noRecurse, ignoreSelectors)    
@@ -116,25 +116,25 @@ function PANEL:GetProperty(name, noRecurse, ignoreSelectors)
         local selected = self:GetProperty("Selected", false, true)
 
         if hovered and selected then
-            local r = xvgui.GetProperty(self, "Hover:Selected:" .. name, noRecurse) or xvgui.GetProperty(self, name, noRecurse)
+            local r = Interface.GetProperty(self, "Hover:Selected:" .. name, noRecurse) or Interface.GetProperty(self, name, noRecurse)
             self.PropertyCache[name] = r
             return r
         elseif hovered then
-            local r = xvgui.GetProperty(self, "Hover:" .. name, noRecurse) or xvgui.GetProperty(self, name, noRecurse)
+            local r = Interface.GetProperty(self, "Hover:" .. name, noRecurse) or Interface.GetProperty(self, name, noRecurse)
             self.PropertyCache[name] = r
             return r
         elseif selected then
-            local r = xvgui.GetProperty(self, "Selected:" .. name, noRecurse) or xvgui.GetProperty(self, name, noRecurse)
+            local r = Interface.GetProperty(self, "Selected:" .. name, noRecurse) or Interface.GetProperty(self, name, noRecurse)
             self.PropertyCache[name] = r
             return r
         end
     end
 
-    local r = xvgui.GetProperty(self, name, noRecurse)
+    local r = Interface.GetProperty(self, name, noRecurse)
     self.PropertyCache[name] = r or empty
     return r
 end
-XPanel.GetProperty = PANEL.GetProperty
+Rect.GetProperty = PANEL.GetProperty
 
 function PANEL:SetPropertyOption(name, key, value)
     assert(name, "Must provide a property name")
@@ -151,7 +151,7 @@ function PANEL:SetPropertyOption(name, key, value)
 
     self.Properties[name] = p
 end
-XPanel.SetPropertyOption = PANEL.SetPropertyOption
+Rect.SetPropertyOption = PANEL.SetPropertyOption
 
 -- Children management
 function PANEL:GenerateChildrenCache(child, force)
@@ -169,7 +169,7 @@ function PANEL:GenerateChildrenCache(child, force)
         end
     end
 end
-XPanel.GenerateChildrenCache = PANEL.GenerateChildrenCache
+Rect.GenerateChildrenCache = PANEL.GenerateChildrenCache
 
 function PANEL:GetChildren()
     local out = {}
@@ -181,7 +181,7 @@ function PANEL:GetChildren()
 
     return out
 end
-XPanel.GetChildren = PANEL.GetChildren
+Rect.GetChildren = PANEL.GetChildren
 
 function PANEL:OnChildAdded(child)
     self:GenerateChildrenCache(child)
@@ -204,7 +204,7 @@ function PANEL:OnChildAdded(child)
         end
     end)--]]
 end
-XPanel.OnChildAdded = PANEL.OnChildAdded
+Rect.OnChildAdded = PANEL.OnChildAdded
 
 function PANEL:OnChildRemoved(child)
     self:GenerateChildrenCache(nil, true)
@@ -212,7 +212,7 @@ function PANEL:OnChildRemoved(child)
     local p_w = self:GetProperty("Width", true)
     local p_h = self:GetProperty("Height", true)
 end
-XPanel.OnChildRemoved = PANEL.OnChildRemoved
+Rect.OnChildRemoved = PANEL.OnChildRemoved
 
 function PANEL:CalculateChildrenSize()
     local tw, th = 0, 0
@@ -243,7 +243,7 @@ function PANEL:CalculateChildrenSize()
 
     return tw, th
 end
-XPanel.CalculateChildrenSize = PANEL.CalculateChildrenSize
+Rect.CalculateChildrenSize = PANEL.CalculateChildrenSize
 
 function PANEL:SizeToChildren(sizeW, sizeH)
     local w, h = self:CalculateChildrenSize()
@@ -251,10 +251,10 @@ function PANEL:SizeToChildren(sizeW, sizeH)
 
     self:SetSize(sizeW and w + pl + pr or self:GetWide(), sizeH and h + pt + pb or self:GetTall())
 end
-XPanel.SizeToChildren = PANEL.SizeToChildren
+Rect.SizeToChildren = PANEL.SizeToChildren
 
 function PANEL:PerformLayout(w, h, noSet)
-    w, h = xvgui.PerformLayout(self, w, h)
+    w, h = Interface.PerformLayout(self, w, h)
 
     if self:GetProperty("SuppressLayout") then
         return true
@@ -300,7 +300,7 @@ function PANEL:PerformLayout(w, h, noSet)
     end
     return w, h, x, y
 end
-XPanel.PerformLayout = PANEL.PerformLayout
+Rect.PerformLayout = PANEL.PerformLayout
 
 function PANEL:CalculateName()
     local ref = self:GetProperty("Ref", true)
@@ -310,7 +310,7 @@ function PANEL:CalculateName()
 
     return self.ClassName
 end
-XPanel.CalculateName = PANEL.CalculateName
+Rect.CalculateName = PANEL.CalculateName
 
 function PANEL:CalculatePosition()
     return self:GetProperty("X", true), self:GetProperty("Y", true)
@@ -323,22 +323,22 @@ function PANEL:CalculatePosition()
         end
     end--]]
 end
-XPanel.CalculatePosition = PANEL.CalculatePosition
+Rect.CalculatePosition = PANEL.CalculatePosition
 
 function PANEL:CalculatePadding()
     return self:GetProperty("PaddingLeft", true) or 0, self:GetProperty("PaddingTop", true) or 0, self:GetProperty("PaddingRight", true) or 0, self:GetProperty("PaddingBottom", true) or 0
 end
-XPanel.CalculatePadding = PANEL.CalculatePadding
+Rect.CalculatePadding = PANEL.CalculatePadding
 
 function PANEL:CalculateMargin()
     return self:GetProperty("MarginLeft", true) or 0, self:GetProperty("MarginTop", true) or 0, self:GetProperty("MarginRight", true) or 0, self:GetProperty("MarginBottom", true) or 0
 end
-XPanel.CalculateMargin = PANEL.CalculateMargin
+Rect.CalculateMargin = PANEL.CalculateMargin
 
 function PANEL:CalculateBorderRadius()
     return self:GetProperty("TopLeftRadius", true), self:GetProperty("TopRightRadius", true), self:GetProperty("BottomRightRadius", true), self:GetProperty("BottomLeftRadius", true)
 end
-XPanel.CalculateMargin = PANEL.CalculateMargin
+Rect.CalculateMargin = PANEL.CalculateMargin
 
 function PANEL:CalculateSize()
     if self:GetProperty("Grow", true) then
@@ -371,7 +371,7 @@ function PANEL:CalculateSize()
 
     return math.Round(w, 0), math.Round(h, 0)
 end
-XPanel.CalculateSize = PANEL.CalculateSize
+Rect.CalculateSize = PANEL.CalculateSize
 
 function PANEL:GenerateMaterial(name, func, w, h)
     timer.Create(self.Uuid .. name, 1, 1, function ()
@@ -631,7 +631,7 @@ function PANEL:CalculateFlex(w, h)
         end
     end
 end
-XPanel.CalculateFlex = PANEL.CalculateFlex
+Rect.CalculateFlex = PANEL.CalculateFlex
 
 function PANEL:Think()
 
@@ -663,7 +663,7 @@ function PANEL:OnMousePressed(code)
         end
     end
 end
-XPanel.OnMousePressed = PANEL.OnMousePressed
+Rect.OnMousePressed = PANEL.OnMousePressed
 
 -- We delay the calculation of a func background (1) so we can get a size and (2) wait a little while
 -- to ensure the size has stabilized.
@@ -702,19 +702,19 @@ function PANEL:CalculateBackground()
         end)
     end
 end
-XPanel.CalculateBackground = PANEL.CalculateBackground
+Rect.CalculateBackground = PANEL.CalculateBackground
 
 function PANEL:CalculateFont()
     local font = self:GetProperty("FontName")
     local size = self:GetProperty("FontSize")
     local weight = self:GetProperty("FontWeight")
 
-    local p = xvgui.Font(font, size, weight)
+    local p = Interface.Font(font, size, weight)
     self:SetProperty("Font", p)
     
-    return xvgui.Font(font, size, weight)
+    return Interface.Font(font, size, weight)
 end
-XPanel.CalculateFont = PANEL.CalculateFont
+Rect.CalculateFont = PANEL.CalculateFont
 
 NUM_STENCILS = 0
 
@@ -800,12 +800,12 @@ function PANEL:PaintBackground(w, h)
         
     end
 end
-XPanel.Paint = PANEL.Paint
-XPanel.PaintBackground = PANEL.PaintBackground
+Rect.Paint = PANEL.Paint
+Rect.PaintBackground = PANEL.PaintBackground
 
 
 function PANEL:OnPropertyChanged(prop, value, old)
-    if xvgui.OnPropertyChanged(self, prop, value, old) then
+    if Interface.OnPropertyChanged(self, prop, value, old) then
         return true
     end
     
@@ -879,7 +879,7 @@ function PANEL:OnPropertyChanged(prop, value, old)
         end
     end
 
-    if p.IsXPanel and (prop == "Display" or prop == "X" or prop == "Y" or prop == "Width" or prop == "Height") then
+    if p.IsRect and (prop == "Display" or prop == "X" or prop == "Y" or prop == "Width" or prop == "Height") then
         -- For positionals, do nothing if the value is set to nil.
         if prop ~= "Display" and not value then
             return true
@@ -892,7 +892,7 @@ function PANEL:OnPropertyChanged(prop, value, old)
         return true
     end
 end
-XPanel.OnPropertyChanged = PANEL.OnPropertyChanged
+Rect.OnPropertyChanged = PANEL.OnPropertyChanged
 BasePanel.CalculateMargin = PANEL.CalculateMargin
 
 
@@ -900,5 +900,26 @@ local wp = vgui.GetWorldPanel()
 
 -- GMod default: 13px Tahoma, anti-aliased.
 wp:SetProperty("BackgroundFallback", color_black)
+vgui.Register("Rect", PANEL, "EditablePanel")
 
-vgui.Register("XPanel", PANEL, "EditablePanel")
+
+Interface.RegisterAttribute("Panel", "BackgroundFallback", Type.Color)
+Interface.RegisterAttribute("Rect", "Background", Type.Color)
+
+Interface.RegisterAttribute("Rect", "Padding", Interface.Extent4)
+Interface.RegisterAttribute("Rect", "PaddingLeft", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "PaddingTop", Interface.ExtentH)
+Interface.RegisterAttribute("Rect", "PaddingRight", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "PaddingBottom", Interface.ExtentH)
+
+Interface.RegisterAttribute("Rect", "Margin", Interface.Extent4)
+Interface.RegisterAttribute("Rect", "MarginLeft", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "MarginTop", Interface.ExtentH)
+Interface.RegisterAttribute("Rect", "MarginRight", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "MarginBottom", Interface.ExtentH)
+
+Interface.RegisterAttribute("Rect", "Radius", Interface.Extent4)
+Interface.RegisterAttribute("Rect", "RadiusTopLeft", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "RadiusTopRight", Interface.ExtentH)
+Interface.RegisterAttribute("Rect", "RadiusBottomLeft", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "RadiusBottomRight", Interface.ExtentH)

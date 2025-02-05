@@ -171,8 +171,13 @@ function COLOR:Parse(value)
     if value == nil then
         return color_transparent
     end
-    
-    local r, g, b, a = string.match(value, "(%d+) %s*(%d+) %s*(%d+) %s*(%d+)")
+
+    local h = colorex.FromHex(value)
+    if h then
+        return h
+    end
+
+    local r, g, b, a = string.match(string.Replace(string.Replace(value, ",", " "), "  ", " "), "(%d+) %s*(%d+) %s*(%d+) %s*(%d+)")
     r = tonumber(r)
     g = tonumber(g)
     b = tonumber(b)

@@ -10,7 +10,7 @@ function BasePanel:LoadXML()
 
     local t = self.Xml
     for k, v in pairs(t.Attributes) do
-        local sa = xvgui.SpecialAttributes[k] 
+        local sa = Interface.SpecialAttributes[k] 
         if sa then
             sa(el, parent, node)
         else
@@ -22,10 +22,10 @@ function BasePanel:LoadXML()
     self:SetProperty("Root", self)
 
     for k, v in pairs(t.Children) do
-        xvgui.CreateFromNode(self, v, { Root = self })
+        Interface.CreateFromNode(self, v, { Root = self })
     end
 end
-xvgui.LoadXML = BasePanel.LoadXML
+Interface.LoadXML = BasePanel.LoadXML
 
 -- Properties
 do
@@ -40,7 +40,7 @@ do
         end
         return FuncEnv
     end
-    xvgui.GetFuncEnv = BasePanel.GetFuncEnv
+    Interface.GetFuncEnv = BasePanel.GetFuncEnv
 
     function BasePanel:SetProperty(name, value)
         assert(name, "Must provide a property name")
@@ -74,7 +74,7 @@ do
 
         self.Properties[name] = p
     end
-    xvgui.SetProperty = BasePanel.SetProperty
+    Interface.SetProperty = BasePanel.SetProperty
 
     function BasePanel:SetPropertyOption(name, key, value)
         assert(name, "Must provide a property name")
@@ -96,7 +96,7 @@ do
 
         self.Properties[name] = p
     end
-    xvgui.SetPropertyOption = BasePanel.SetPropertyOption
+    Interface.SetPropertyOption = BasePanel.SetPropertyOption
     
     function BasePanel:GetPropertyOption(name, key)
         assert(name, "Must provide a property name")
@@ -110,7 +110,7 @@ do
             return p.Options[key]
         end
     end
-    xvgui.GetPropertyOption = BasePanel.GetPropertyOption
+    Interface.GetPropertyOption = BasePanel.GetPropertyOption
 
     function BasePanel:GetProperty(name, noRecurse, ...)
         if self.Properties then
@@ -129,12 +129,12 @@ do
 
         return nil
     end
-    xvgui.GetProperty = BasePanel.GetProperty
+    Interface.GetProperty = BasePanel.GetProperty
 
     function BasePanel:GetProperties()
         return self.Properties
     end
-    xvgui.GetProperties = BasePanel.GetProperties
+    Interface.GetProperties = BasePanel.GetProperties
 
     function BasePanel:OnPropertyChanged(name, value, old)
         if name == "Ref" then
@@ -174,7 +174,7 @@ do
             return true
         end
     end
-    xvgui.OnPropertyChanged = BasePanel.OnPropertyChanged
+    Interface.OnPropertyChanged = BasePanel.OnPropertyChanged
 
     local function GetPropertyResult(...)
         return select("#", ...), {...}
@@ -262,13 +262,13 @@ do
             self.Hidden = false
         end
     end
-    xvgui.CalculateProperties = BasePanel.CalculateProperties
+    Interface.CalculateProperties = BasePanel.CalculateProperties
 end
 
 -- InvalidateLayout. Used for For loops
 do
     BasePanel.InvalidateLayoutRaw = BasePanel.InvalidateLayoutRaw or BasePanel.InvalidateLayout
-    xvgui.InvalidateLayoutRaw = BasePanel.InvalidateLayoutRaw
+    Interface.InvalidateLayoutRaw = BasePanel.InvalidateLayoutRaw
 
     function BasePanel:InvalidateLayout(layoutNow)
         self:InvalidateLayoutRaw(layoutNow)
@@ -287,7 +287,7 @@ do
 
             for k, v in pairs(data) do
                 for k2, v2 in pairs(self.ForXml) do
-                    local el = xvgui.CreateFromNode(self, v2, { For = true })
+                    local el = Interface.CreateFromNode(self, v2, { For = true })
                     for k3, v3 in pairs(v) do
                         el:SetProperty(k3, v3)
                     end
@@ -296,7 +296,7 @@ do
             end
         end
     end
-    xvgui.InvalidateLayout = BasePanel.InvalidateLayout
+    Interface.InvalidateLayout = BasePanel.InvalidateLayout
 end
 
 -- Events/emits
@@ -316,7 +316,7 @@ do
     function BasePanel:Emit(event, ...)
         return Emit(self, self, event, ...)
     end
-    xvgui.Emit = BasePanel.Emit
+    Interface.Emit = BasePanel.Emit
 
     local function EmitChildren(self, panel, event, ...)
         self:HandleEmit(panel, event, ...)
@@ -328,7 +328,7 @@ do
     function BasePanel:EmitChildren(event, ...)
         self:EmitChildren(self, self, event, ...)
     end
-    xvgui.EmitChildren = BasePanel.EmitChildren
+    Interface.EmitChildren = BasePanel.EmitChildren
 
     function BasePanel:HandleEmit(panel, event, ...)
         hndl = self:GetProperty("On:" .. event)
@@ -336,16 +336,57 @@ do
             hndl(panel, ...)
         end 
     end
-    xvgui.HandleEmit = BasePanel.HandleEmit
+    Interface.HandleEmit = BasePanel.HandleEmit
 end
 
-function BasePanel:XMLHandleText(text, node, ctx)    
-    local el = vgui.Create("XLabel", self)
-    if not xvgui.IsXVGUI(el:GetParent()) then
+function BasePanel:ParseNode(parent, node, ctx)
+    local el = vgui.Create(node.Tag, parent)
+    local types = Interface.GetAttributes(node.Tag)
+
+    -- Attributes
+    for k, v in pairs(node.Attributes) do
+        local sa = Interface.SpecialAttributes[k] 
+        if sa then
+            if sa(el, v, node, ctx) == true then
+                continue
+            end
+        else
+            local splitted = string.Split(k, ":")
+            if #splitted > 1 then
+                local sp = Interface.SpecialPrefixes[splitted[1]]
+                if sp and sp(el, splitted[2], v, splitted, node, ctx) then
+                    continue
+                end
+            end
+
+            if not isfunction(v) then
+                local at = types[k]
+                if at then
+                    if isfunction(at) then
+                        v = at(v)
+                    else
+                        v = at:Parse(v)
+                    end
+                end
+            end
+            el:SetProperty(k, v)
+        end
+    end
+
+    -- Children
+    for k, v in pairs(node.Children) do
+        Interface.CreateFromNode(el, v, ctx)
+    end
+
+    return el
+end
+
+function BasePanel:ParseContent(text, node, ctx)
+    local el = vgui.Create("Text", self)
+    if not Interface.IsPanelInitialized(el:GetParent()) then
         el:Dock(LEFT)
     end
-    el:SetText(text)
-    return el
+    el:SetProperty("Content", text)
 end
 
 local wp = vgui.GetWorldPanel()
@@ -356,7 +397,7 @@ wp.FuncEnv = setmetatable({
 wp:SetProperty("Display", true)
 
 
-XVGUI_PERFORM_LAYOUT = function (self, w, h)
+INTERFACE_PERFORM_LAYOUT = function (self, w, h)
     local LastW, LastH = self:GetSize()
 
     w, h = self:CalculateProperties()
@@ -367,4 +408,133 @@ XVGUI_PERFORM_LAYOUT = function (self, w, h)
     
     return w, h
 end
-xvgui.PerformLayout = XVGUI_PERFORM_LAYOUT
+Interface.PerformLayout = INTERFACE_PERFORM_LAYOUT
+
+local function DefaultExtent(value)
+    if string.EndsWith(value, "px") then
+        return tonumber(string.sub(value, 1, -3))
+    end
+
+    if string.EndsWith(value, "ss") then
+        return function ()
+            return ScreenScale(tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    if string.EndsWith(value, "ssh") then
+        return function ()
+            return ScreenScaleH(tonumber(string.sub(value, 1, -4)))
+        end
+    end
+
+    if string.EndsWith(value, "vw") then
+        return function ()
+            return ScrW() * (tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    if string.EndsWith(value, "vh") then
+        return function ()
+            return ScrH() * (tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    if string.EndsWith(value, "pw") then
+        return function ()
+            return PW * (tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    if string.EndsWith(value, "ph") then
+        return function ()
+            return PH * (tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    if string.EndsWith(value, "cw") then
+        return function ()
+            local font = self:CalculateFont()
+            surface.SetFont(font)
+            local x2, y2 = surface.GetTextSize(" ")
+            return x2 * tonumber(string.sub(value, 1, -3))
+        end
+    end
+
+    if string.EndsWith(value, "ch") then
+        return function ()
+            local font = self:CalculateFont()
+            surface.SetFont(font)
+            local x2, y2 = surface.GetTextSize(" ")
+            return y2 * tonumber(string.sub(value, 1, -3))
+        end
+    end
+
+    error("Invalid extent: " .. value)
+end
+
+function Interface.ExtentW(value)
+    local tn = tonumber(value)
+    if tn then
+        return function ()
+            return ScreenScale(value)
+        end
+    end
+    
+    if string.EndsWith(value, "%") then
+        return function ()
+            return PW * (tonumber(string.sub(value, 1, -2)) / 100)
+        end
+    end
+
+    return DefaultExtent(value)
+end
+
+function Interface.ExtentH(value)
+    local tn = tonumber(value)
+    if tn then
+        return function ()
+            return ScreenScaleH(value)
+        end
+    end
+
+    if string.EndsWith(value, "%") then
+        return function ()
+            return PH * (tonumber(string.sub(value, 1, -2)) / 100)
+        end
+    end
+
+    return DefaultExtent(value)
+end
+
+function Interface.Extent4(value)
+    value = string.Replace(value, ",", " ")
+    value = string.Replace(value, "  ", " ")
+    local s = string.Split(value, " ")
+
+    local l, t, r, b = s[1], s[2], s[3], s[4]
+    if not r then
+        r = l
+    end
+
+    if not b then
+        b = t
+    end
+
+    if not t then
+        t = l
+        b = l
+        r = l
+    end
+
+    print(Interface.ExtentW(l), Interface.ExtentH(t), Interface.ExtentW(r), Interface.ExtentH(b))
+    return Interface.ExtentW(l), Interface.ExtentH(t), Interface.ExtentW(r), Interface.ExtentH(b)    
+end
+
+Interface.RegisterAttribute("Panel", "X", Interface.ExtentW)
+Interface.RegisterAttribute("Panel", "Y", Interface.ExtentH)
+Interface.RegisterAttribute("Panel", "Width", Interface.ExtentW)
+Interface.RegisterAttribute("Panel", "Height", Interface.ExtentH)
+Interface.RegisterAttribute("Panel", "Wide", Interface.ExtentW)
+Interface.RegisterAttribute("Panel", "Tall", Interface.ExtentH)
+Interface.RegisterAttribute("Panel", "DockPadding", Interface.Extent4)
+Interface.RegisterAttribute("Panel", "DockMargin", Interface.Extent4)

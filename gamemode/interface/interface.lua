@@ -1,15 +1,14 @@
+AddCSLuaFile()
+
 Interface = {}
 
-Interface.FuncCache = weaktable(false, true)
+include("2d/xml.lua")
+include("2d/fonts.lua")
+include("2d/basepanel.lua")
+include("2d/rect.lua")
+include("2d/text.lua")
+include("2d/img.lua")
 
-IncludeEx("derma/vgui.lua", Realm.Shared)
-IncludeEx("derma/xml.lua", Realm.Shared)
-
-
---[[
-    DoR:
-    1. I can create Derma elements via XML.
-    2. I can set their properties using attributes.
-    3. Properties are validated using types.
-    4. I can programmatically set properties.
-]]
+if SERVER then
+    return
+end
