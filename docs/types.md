@@ -23,12 +23,26 @@ When using Type.Register, it returns an instance of Type; this should be used to
 
 You can create a type using *Type.Register*:
 ```lua
-local MyType = Type.Register("MyType", Type.ParentType, { Option = "1234" })
+local MyType = Type.Register("MyType", Type.ParentType, [options])
 ```
 
 In this case, MyType will inherit all the functionality from Type.ParentType, and its parents, all the way up to the prototype of Type itself (which is called an Object).
 
 In keeping to how GMod handles entities, the logic for what happens when an instance of a type is created should be defined in *Type.Prototype:Initialize*.
+
+
+
+#### Options
+
+The third optional parameter (options) to Type.Register is a table; they're used by other parts of the system to drive certain functionality, like what database table it should synchronize with.
+
+The default options that come out of the box with Symphony are:
+| Key           | Type     | Default      | Description                                       |
+| ------------- | -------- | ------------ | ------------------------------------------------- |
+| Table         | String   | nil          | Binds this type to a specific MySQL table         |
+| DatabaseType  | String   | JSON or UUID | Defines what MySQL type to use when this type is used as a property on another type. If the type has an ORM binding, it defaults to the object's ID, i.e. a foreign key. |
+
+
 
 ### Properties
 Properties define which parts of an instance's data should be networked or stored in the database. 

@@ -70,7 +70,6 @@ IncludeEx("lib/colorex.lua", Realm.Shared)
 IncludeEx("lib/uuid.lua", Realm.Shared)
 IncludeEx("lib/materialex.lua", Realm.Shared)
 IncludeEx("lib/drawex.lua", Realm.Shared)
-IncludeEx("lib/xvgui/xvgui.lua", Realm.Shared)
 xml2lua = IncludeEx("lib/xml2lua/xml2lua.lua", Realm.Shared)
 
 Circles = IncludeEx("lib/circles.lua", Realm.Shared)
@@ -84,12 +83,9 @@ IncludeEx("types/framework/promise.lua", Realm.Shared)
 IncludeEx("types/framework/rpc.lua", Realm.Shared)
 IncludeEx("types/framework/datetime.lua", Realm.Shared)
 IncludeEx("core/sv_database.lua", Realm.Server)
+IncludeEx("interface/interface.lua", Realm.Shared)
 IncludeEx("core/sh_tests.lua", Realm.Shared)
 
 IncludeEx("views/setup/shared.lua", Realm.Shared)
 
-
--- Set the metatable of _G to fall back to the type system.
-local GMeta = FindMetaTable("_G") or {}
-GMeta.__index = Type.ByName
-setmetatable(_G, GMeta)
+print("___LOAD____")

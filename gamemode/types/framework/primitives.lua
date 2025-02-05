@@ -3,16 +3,16 @@ AddCSLuaFile()
 local PRIMITIVE = Type.Register("Primitive")
 local Deref = false
 
-function PRIMITIVE:Initialize()
-    error("Primitives can't be created via Type.New")
-end
-
 function PRIMITIVE:Serialize(data, ply, root)
     return data
 end
 
 function PRIMITIVE:Deserialize(data)
     return data
+end
+
+function PRIMITIVE:GetValue()
+    return istable(self) and self.Value or self
 end
 
 
@@ -43,7 +43,7 @@ function deref(f)
 end
 
 local STRING = Type.Register("String", PRIMITIVE, { Code = TYPE_STRING, DatabaseType = "TEXT" })
-function STRING.Parse(value)
+function STRING:Parse(value)
     return tostring(value)
 end
 
@@ -58,7 +58,7 @@ PopulateMetaTable(string, STRING)
 
 
 local NUMBER = Type.Register("Number", PRIMITIVE, { Code = TYPE_NUMBER, DatabaseType = "DOUBLE" })
-function NUMBER.Parse(value)
+function NUMBER:Parse(value)
     return tonumber(value)
 end
 
@@ -76,7 +76,7 @@ local FUNCTION = Type.Register("Function", PRIMITIVE, {
     Code = TYPE_FUNCTION
 })
 
-function FUNCTION.Parse(value)
+function FUNCTION:Parse(value)
     return error("Can't parse a function from a string")
 end
 
@@ -95,7 +95,7 @@ debug.setmetatable(32, {
 
 
 local BOOLEAN = Type.Register("Boolean", PRIMITIVE, { Code = TYPE_BOOL, DatabaseType = "BOOLEAN" })
-function BOOLEAN.Parse(value)
+function BOOLEAN:Parse(value)
     value = string.lower(value)
     if value == "true" then
         return true
@@ -116,7 +116,7 @@ debug.setmetatable(true, { __index = GenerateIndexer(BOOLEAN.Prototype), Type = 
 
 
 local NIL = Type.Register("Nil", PRIMITIVE, { Code = TYPE_NIL })
-function NIL.Parse(value)
+function NIL:Parse(value)
     return nil
 end
 
@@ -135,7 +135,7 @@ PopulateMetaTable(FindMetaTable("Entity"), ENTITY)
 
 
 local VECTOR = Type.Register("Vector", PRIMITIVE, { Code = TYPE_VECTOR, DatabaseType = "CHAR(16)" })
-function VECTOR.Parse(value)
+function VECTOR:Parse(value)
     local x, y, z = string.match(value, "%(([%d%.]+),%s*([%d%.]+),%s*([%d%.]+)%)")
     return Vector(tonumber(x), tonumber(y), tonumber(z))
 end
@@ -145,13 +145,13 @@ function VECTOR:DatabaseEncode(value)
 end
 
 function VECTOR:DatabaseDecode(value)
-    return Vector.Parse(value)
+    return Vector:Parse(value)
 end
 PopulateMetaTable(FindMetaTable("Vector"), VECTOR)
 
 
 local ANGLE = Type.Register("Angle", PRIMITIVE, { Code = TYPE_ANGLE, DatabaseType = "CHAR(16)" })
-function ANGLE.Parse(value)
+function ANGLE:Parse(value)
     local p, y, r = string.match(value, "%(([%d%.]+),%s*([%d%.]+),%s*([%d%.]+)%)")
     return Angle(tonumber(p), tonumber(y), tonumber(r))
 end
@@ -161,15 +161,29 @@ function ANGLE:DatabaseEncode(value)
 end
 
 function ANGLE:DatabaseDecode(value)
-    return Angle.Parse(value)
+    return Angle:Parse(value)
 end
 PopulateMetaTable(FindMetaTable("Angle"), ANGLE)
 
 
 local COLOR = Type.Register("Color", PRIMITIVE, { Code = TYPE_COLOR, DatabaseType = "CHAR(16)" })
-function COLOR.Parse(value)
+function COLOR:Parse(value)
+    if value == nil then
+        return color_transparent
+    end
+    
     local r, g, b, a = string.match(value, "(%d+) %s*(%d+) %s*(%d+) %s*(%d+)")
-    return Color(tonumber(r), tonumber(g), tonumber(b), tonumber(a))
+    r = tonumber(r)
+    g = tonumber(g)
+    b = tonumber(b)
+    a = tonumber(a) or 255
+
+    assert(r)
+    assert(g)
+    assert(b)
+    assert(a)
+
+    return Color(r, g, b, a)
 end
 
 function COLOR:DatabaseEncode(value)
@@ -177,13 +191,13 @@ function COLOR:DatabaseEncode(value)
 end
 
 function COLOR:DatabaseDecode(value)
-    return Color.Parse(value)
+    return Color:Parse(value)
 end
 PopulateMetaTable(FindMetaTable("Color"), COLOR)
 
 
 local MATRIX = Type.Register("Matrix", PRIMITIVE, { Code = TYPE_MATRIX, DatabaseType = "JSON" })
-function MATRIX.Parse(value)
+function MATRIX:Parse(value)
     return Matrix(util.JSONToTable(value))
 end
 
@@ -192,7 +206,7 @@ function MATRIX:DatabaseEncode(value)
 end
 
 function MATRIX:DatabaseDecode(value)
-    return Matrix.Parse(value)
+    return Matrix:Parse(value)
 end
 PopulateMetaTable(FindMetaTable("VMatrix"), MATRIX)
 
@@ -203,7 +217,7 @@ local PANEL = Type.Register("Panel", PRIMITIVE, {
     DatabaseType = "TEXT"
 })
 
-function PANEL.Parse(value)
+function PANEL:Parse(value)
     return error("Not implemented")
 end
 
@@ -214,7 +228,7 @@ end
 
 function PANEL:DatabaseDecode(value)
     return error("Not implemented")
-    --return Matrix.Parse(value)
+    --return Matrix:Parse(value)
 end
 
 PopulateMetaTable(FindMetaTable("VMatrix"), MATRIX)
@@ -232,7 +246,7 @@ function TABLE:Deserialize(obj, data)
     end
 end
 
-function TABLE.Parse(value)
+function TABLE:Parse(value)
     return util.JSONToTable(value)
 end
 
@@ -266,15 +280,15 @@ hook.Add("Test.Register", "Primitives", function ()
         Test.Equals(IsPrimitive(Vector(1, 2, 3)), true)
         Test.Equals(IsPrimitive(Angle(1, 2, 3)), true)
 
-        Test.Equals(STRING.Parse("Hello"), "Hello")
-        Test.Equals(NUMBER.Parse("32"), 32)
-        Test.Equals(BOOLEAN.Parse("true"), true)
-        Test.Equals(BOOLEAN.Parse("false"), false)
-        Test.Equals(NIL.Parse(nil), nil)
-        Test.Equals(VECTOR.Parse("(1, 2, 3)"), Vector(1, 2, 3))
-        Test.Equals(ANGLE.Parse("(1, 2, 3)"), Angle(1, 2, 3))
-        Test.Equals(COLOR.Parse("(1, 2, 3, 4)"), Color(1, 2, 3, 4))
-        Test.Equals(MATRIX.Parse("{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}"), Matrix({{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}))
-        Test.Equals(TABLE.Parse("{\"a\": 1}").a, 1)
+        Test.Equals(STRING:Parse("Hello"), "Hello")
+        Test.Equals(NUMBER:Parse("32"), 32)
+        Test.Equals(BOOLEAN:Parse("true"), true)
+        Test.Equals(BOOLEAN:Parse("false"), false)
+        Test.Equals(NIL:Parse(nil), nil)
+        Test.Equals(VECTOR:Parse("(1, 2, 3)"), Vector(1, 2, 3))
+        Test.Equals(ANGLE:Parse("(1, 2, 3)"), Angle(1, 2, 3))
+        Test.Equals(COLOR:Parse("(1, 2, 3, 4)"), Color(1, 2, 3, 4))
+        Test.Equals(MATRIX:Parse("{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}"), Matrix({{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}))
+        Test.Equals(TABLE:Parse("{\"a\": 1}").a, 1)
     end)
 end)

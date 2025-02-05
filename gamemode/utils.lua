@@ -46,15 +46,6 @@ function IncludeEx(path, realm)
 
     if isany(realm, Realm.Current, Realm.Shared) then
         local absPath = engine.ActiveGamemode() .. "/gamemode/" .. path
-
-        if not file.Exists(absPath, "LUA") then
-            sym.log("LUA_INCLUDE", "Failed to include \"<code>" .. path .. "</code>\"")
-            --MsgC(color_white, os.date("%X"), "|", PRINT_ERROR, color_white, PRINT_ERROR, "ERROR", color_white, "|", PRINT_ERROR, "Failed to include: ", COL_STD, path, "\n")
-            return false
-        else
-            sym.log("LUA_INCLUDE", "Including \"<code>" .. path .. "</code>\"")
-            --MsgC(color_white, os.date("%X"), "|", PRINT_COL, color_white, PRINT_COL, "INFO", color_white, "|", color_white, "Including: ", COL_STD, path, "\n")	
-            return include(path)
-        end
+        return include(path)
     end
 end

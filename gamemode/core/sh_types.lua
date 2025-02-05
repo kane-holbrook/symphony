@@ -306,6 +306,13 @@ do
 		return Type.Deserialize(util.JSONToTable(data))
 	end
 
+	function TYPE:TryParse(value)
+		if self.Parse then
+			return pcall(self.Parse, self, value)
+		end
+		return false, nil
+	end
+
 	function TYPE:Select(field, value)
 
 		if not value then
@@ -765,6 +772,13 @@ do
 	end
 
 end
+
+
+-- Set the metatable of _G to fall back to the type system.
+local GMeta = FindMetaTable("_G") or {}
+GMeta.__index = Type.ByName
+setmetatable(_G, GMeta)
+RegisterMetaTable("_G", GMeta)
 
 
 local TEST_NET_PROMISE
