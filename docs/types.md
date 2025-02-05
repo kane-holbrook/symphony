@@ -6,6 +6,7 @@ Symphony Types are a Lua-based object-oriented programming (OOP) implementation.
 - When I use the term *Instance*, I mean an instance of a type that has generally been created using Type.New. Instances typically contain data that its Type has methods for manipulating or displaying. 
 * When I use the term *Object*, I mean an instance of *any* type, as ultimately all types derive from Object (which is itself an implementation of the Type.Type class).
 * When I use the term *ORM*, I'm referencing to the fact that objects can be written to and read from the database.
+* When I use the term *instance table*, I mean the empty table that is what Symphony actually returns when you use Type.New, as opposed to its metatable where all the type-specific functionality is stored.
 
 ## Implementation
 Types are a split into 3 components:
@@ -39,7 +40,7 @@ The third optional parameter (options) to Type.Register is a table; they're used
 The default options that come out of the box with Symphony are:
 | Key           | Type     | Default      | Description                                       |
 | ------------- | -------- | ------------ | ------------------------------------------------- |
-| Table         | String   | nil          | Binds this type to a specific MySQL table         |
+| Table         | String   | nil          | Binds this type to a specific MySQL table (aka defines ORM binding)         |
 | DatabaseType  | String   | JSON or UUID | Defines what MySQL type to use when this type is used as a property on another type. If the type has an ORM binding, it defaults to the object's ID, i.e. a foreign key. |
 
 
@@ -260,6 +261,10 @@ end
 
 This can help you optimize database storage and networking overhead.
 
+
+# Additional notes
+- By default, Type.New returns an empty table (the instance table); everything that makes it a type (including its ID, type, etc) are stored in its *metatable*. This means if you do PrintTable on an instance, you'll get an empty table back. This is helpful for making containers, but something to be mindful of. This is an architectural paradigm in Symphony: as a general rule, an instance table should only contain data that is unique to this instance (with the exception of Id which is stored in the metatable purely for the sake of convenience so that you don't have to filter out the Id field when doing a foreach). 
+  - Properties once set however __are__ stored as fields on that table; so SetProperty("Test", 123) creates a key called Test that equals 123.
 
 
 # Reference
