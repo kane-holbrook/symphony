@@ -88,7 +88,7 @@ function FUNCTION:DatabaseDecode(value)
     return error("Cannot decode a function")
 end
 
-debug.setmetatable(32, {
+debug.setmetatable(debug.setmetatable, {
     __index = GenerateIndexer(FUNCTION.Prototype),
     Type = FUNCTION
 })
