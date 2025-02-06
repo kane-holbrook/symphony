@@ -3,6 +3,7 @@ EVENTRESULT:CreateProperty("Cancelled")
 EVENTRESULT:CreateProperty("Result")
 EVENTRESULT:CreateProperty("Data")
 EVENTRESULT:CreateProperty("Name")
+
 local EVENTBUS = Type.Register("EventBus")
 function EVENTBUS.Prototype:Initialize()
     base()
@@ -57,16 +58,21 @@ end
 
 function EVENTBUS.Prototype:Run(name, ...)
     local h = self[name]
-    if not h then return end
+    
+    local er = Type.New(EVENTRESULT)
+    er:SetName(name)
+    er:SetData({...})
+
+    if not h then 
+        return er
+    end
+
     local mt = getmetatable(h)
     if not mt.Cache then
         mt.Cache = table.ClearKeys(h)
         table.SortByMember(mt.Cache, "Priority", true)
     end
 
-    local er = Type.New(EVENTRESULT)
-    er:SetName(name)
-    er:SetData({...})
     Event = er
     for k, v in pairs(mt.Cache) do
         v.Func(...)
