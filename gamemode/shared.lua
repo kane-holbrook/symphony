@@ -58,6 +58,11 @@ function sym.log(type, content, data, time, realm)
     })
 end
 
+function PrintAndReturn(...)
+    print(...)
+    return ...
+end
+
 SYM_START_TIME = SysTime()
 
 include("utils.lua")

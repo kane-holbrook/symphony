@@ -343,8 +343,19 @@ function BasePanel:ParseNode(parent, node, ctx)
     local el = vgui.Create(node.Tag, parent)
     local types = Interface.GetAttributes(node.Tag)
 
+    -- Apply styles first
+    local style = node.Attributes["Style"]
+    if style then
+        Interface.SpecialAttributes["Style"](el, style, node, ctx)
+    end
+
     -- Attributes
     for k, v in pairs(node.Attributes) do
+        -- Skip styles; these should always be applied first.
+        if k == "Style" then
+            continue
+        end
+
         local sa = Interface.SpecialAttributes[k] 
         if sa then
             if sa(el, v, node, ctx) == true then

@@ -128,7 +128,7 @@ function HTMLGradient(css, w, h, shader)
     return HTMLMaterial([[<body style='margin:0; padding:0; box-sizing:border-box;'><div style='width:100%; height:100%; box-sizing:border-box; background: ]] .. css ..[[;'></div></body>]], w, h, shader)
 end
 
-function HTMLCircleGradient(w, h, ...) 
+function CircleGradient(w, h, ...) 
 
     local args = {...}
     
@@ -146,7 +146,7 @@ function HTMLCircleGradient(w, h, ...)
     )]], w, h)
 end
 
-function HTMLConicGradient(w, h, ...)    
+function ConicGradient(w, h, ...)    
     local args = {...}
     
     local stops = {}
@@ -162,7 +162,7 @@ function HTMLConicGradient(w, h, ...)
     )]], w, h)
 end
 
-function HTMLLinearGradient(w, h, rotation, ...)    
+function LinearGradient(w, h, rotation, ...)    
     local args = {...}
     
     local stops = {}
@@ -179,7 +179,7 @@ function HTMLLinearGradient(w, h, rotation, ...)
 end
 
 
-function HTMLRepeatingLinearGradient(w, h, rotation, ...)    
+function RepeatingLinearGradient(w, h, rotation, ...)    
     local args = {...}
     
     local stops = {}

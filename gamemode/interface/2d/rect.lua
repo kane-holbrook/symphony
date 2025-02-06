@@ -77,6 +77,7 @@ function PANEL:SetProperty(name, value)
     local old = p.Value
     if isfunction(value) then
         p.Func = value
+        self.PropertyCache[name] = nil
     else
         p.Value = value
 
@@ -93,22 +94,17 @@ function PANEL:SetProperty(name, value)
         if value ~= old then
             self:OnPropertyChanged(name, value, old)
         end
+        self.PropertyCache[name] = p.Value
     end
 
     self.Properties[name] = p
-    self.PropertyCache[name] = nil
 end
 Rect.SetProperty = PANEL.SetProperty
 
-local empty = {}
 function PANEL:GetProperty(name, noRecurse, ignoreSelectors)    
     local val = self.PropertyCache[name]
-    if val then
-        if val == empty then
-            return nil
-        else
-            return val
-        end
+    if val ~= nil then
+        return val
     end
 
     if not ignoreSelectors then
@@ -116,7 +112,7 @@ function PANEL:GetProperty(name, noRecurse, ignoreSelectors)
         local selected = self:GetProperty("Selected", false, true)
 
         if hovered and selected then
-            local r = Interface.GetProperty(self, "Hover:Selected:" .. name, noRecurse) or Interface.GetProperty(self, name, noRecurse)
+            local r = Interface.GetProperty(self, "Hover:Selected:" .. name, noRecurse) or Interface.GetProperty(self, "Hover:" .. name, noRecurse) or Interface.GetProperty(self, name, noRecurse)
             self.PropertyCache[name] = r
             return r
         elseif hovered then
@@ -131,6 +127,7 @@ function PANEL:GetProperty(name, noRecurse, ignoreSelectors)
     end
 
     local r = Interface.GetProperty(self, name, noRecurse)
+    
     self.PropertyCache[name] = r or empty
     return r
 end
@@ -642,7 +639,11 @@ function PANEL:Think()
     -- This eats 40 frames
     if self:GetProperty("Hover") then
         local hovered = self:IsHovered() or self:IsChildHovered()
-        if hovered ~= self:GetProperty("Hovered", true) then
+
+        if hovered ~= self:GetProperty("Hovered", true, true) then
+            if not hovered then
+                print(hovered, self:GetProperty("Hovered", true, true))
+            end
             self:SetProperty("Hovered", hovered)
             self:InvalidateLayout()
         end
@@ -761,8 +762,9 @@ function PANEL:Paint(w, h)
 end
 
 function PANEL:PaintBackground(w, h)
+    local bg = self:GetProperty("Background")
     if self:GetProperty("Background", true) then
-        local bg = self.Background
+        --local bg = self.Background
         if bg then
             if IsColor(bg) then
                 surface.SetDrawColor(bg)
@@ -919,7 +921,9 @@ Interface.RegisterAttribute("Rect", "MarginRight", Interface.ExtentW)
 Interface.RegisterAttribute("Rect", "MarginBottom", Interface.ExtentH)
 
 Interface.RegisterAttribute("Rect", "Radius", Interface.Extent4)
-Interface.RegisterAttribute("Rect", "RadiusTopLeft", Interface.ExtentW)
-Interface.RegisterAttribute("Rect", "RadiusTopRight", Interface.ExtentH)
-Interface.RegisterAttribute("Rect", "RadiusBottomLeft", Interface.ExtentW)
-Interface.RegisterAttribute("Rect", "RadiusBottomRight", Interface.ExtentH)
+Interface.RegisterAttribute("Rect", "TopLeftRadius", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "TopRightRadius", Interface.ExtentH)
+Interface.RegisterAttribute("Rect", "BottomLeftRadius", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "BottomRightRadius", Interface.ExtentH)
+
+Interface.RegisterAttribute("Rect", "Gap", Interface.ExtentW)

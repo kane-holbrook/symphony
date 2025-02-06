@@ -376,6 +376,35 @@ Interface.RegisterSpecialTag("Slot", function (parent, node, ctx)
     return true
 end)
 
+Interface.RegisterSpecialTag("Style", function (parent, node, ctx)
+    
+    local ref = node.Attributes["Ref"]
+    assert(ref, "Must provide a Ref for <Style> elements.")
+
+    node.Attributes["Ref"] = nil
+    parent.Styles = parent.Styles or {}
+    parent.Styles[ref] = node.Attributes
+
+    return true
+end)
+
+Interface.RegisterSpecialAttribute("Style", function (el, value, node, ctx)
+    -- Recurse parents to find the style 
+    local p = el:GetParent()
+    while p do
+        if p.Styles then
+            local s = p.Styles[value]
+            if s then
+                for k, v in pairs(s) do
+                    el:SetProperty(k, v)
+                end
+                return true
+            end
+        end
+        p = p:GetParent()
+    end
+end)
+
 Interface.RegisterSpecialTag("Content", function (parent, node, ctx)
     return parent:ParseContent(node.Attributes["Text"], node, ctx)
 end)
