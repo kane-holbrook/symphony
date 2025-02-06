@@ -302,7 +302,9 @@ end
 -- Events/emits
 do
     local function Emit(self, panel, event, ...)
-        self:HandleEmit(panel, event, ...)
+        if self:HandleEmit(panel, event, ...) == true then
+            return true
+        end
 
         local p = self:GetParent()
         if p then

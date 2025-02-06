@@ -55,6 +55,7 @@ function PANEL:Init()
     
     self:SetProperty("Flex", 7)
     self:SetProperty("Direction", "X")
+    self.EventBus = new(Type.EventBus)
 end
 Rect.Init = PANEL.Init
 
@@ -630,26 +631,51 @@ function PANEL:CalculateFlex(w, h)
 end
 Rect.CalculateFlex = PANEL.CalculateFlex
 
-function PANEL:Think()
+function PANEL:OnCursorEntered()
+    self:Emit("Hover")
+end
+Rect.OnCursorEntered = PANEL.OnCursorEntered
 
-    if self.NextHoverCheck and CurTime() < self.NextHoverCheck then
+function PANEL:OnCursorExited()
+    self:Emit("StopHover")
+end
+Rect.OnCursorExited = PANEL.OnCursorExited
+
+function PANEL:OnStartHover(child)
+    self:SetProperty("Hovered", true)
+    self:InvalidateLayout()
+end
+
+function PANEL:OnStopHover(child)
+    self:SetProperty("Hovered", false)
+    self:InvalidateLayout()
+end
+
+function PANEL:HandleEmit(panel, event, ...)
+    BasePanel.HandleEmit(self, panel, event, ...)
+
+    local r = self.EventBus:Run("Emit", self, panel, event, ...)
+
+    if r:GetCancelled() then
+        return true
+    end
+    
+    r = self.EventBus:Run(event, self, panel, ...)
+    if r:GetCancelled() then
         return
     end
 
-    -- This eats 40 frames
-    if self:GetProperty("Hover") then
-        local hovered = self:IsHovered() or self:IsChildHovered()
-
-        if hovered ~= self:GetProperty("Hovered", true, true) then
-            if not hovered then
-                print(hovered, self:GetProperty("Hovered", true, true))
-            end
-            self:SetProperty("Hovered", hovered)
-            self:InvalidateLayout()
-        end
+    if event == "Hover" and self:GetProperty("Hover", true) then
+        self:OnStartHover(panel, ...)
+        return true
     end
-    self.NextHoverCheck = CurTime() + 0.1
+
+    if event == "StopHover" and self:GetProperty("Hover", true) then
+        self:OnStopHover(panel, ...)
+        return true
+    end
 end
+Rect.HandleEmit = PANEL.HandleEmit
 
 function PANEL:OnMousePressed(code)
     if code == MOUSE_LEFT then

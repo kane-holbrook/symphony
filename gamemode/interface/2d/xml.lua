@@ -98,6 +98,9 @@ function Interface.RegisterAttribute(name, attr, type)
     end
 
     t[attr] = type
+    t["Hover:" .. attr] = type
+    t["Selected:" .. attr] = type
+    t["Selected:Hover:" .. attr] = type
 end
 
 function Interface.GetAttributes(name)
