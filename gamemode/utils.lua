@@ -49,3 +49,15 @@ function IncludeEx(path, realm)
         return include(path)
     end
 end
+
+function nticks(n, func, ...)
+    local id = uuid()
+    local args = {...}
+    hook.Add("Tick", id, function()
+        n = n - 1
+        if n == 0 then
+            func(unpack(args))
+            hook.Remove("Tick", uuid)
+        end
+    end)
+end
