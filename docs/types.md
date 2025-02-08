@@ -43,8 +43,9 @@ The default options that come out of the box with Symphony are:
 | Table         | String   | nil          | Binds this type to a specific MySQL table (aka defines ORM binding)        |
 | Key           | String   | Id           | Overrides which field should be used as the primary key iiin the database. |
 | DatabaseType  | String   | JSON or UUID | Defines what MySQL type to use when this type is used as a property on another type. If the type has an ORM binding, it defaults to the object's ID, i.e. a foreign key. |
-| Priority      | Number   | 0            | Allows you to define the order in which properties are returned. Negative numbers are returned first, positive numbers are returned last.
-
+| Priority      | Number   | 0            | Allows you to define the order in which properties are returned. Negative numbers are returned first, positive numbers are returned last. |
+| NoSetter      | Boolean  | false        | Prevents the creation of a setter method (SetXXX) |
+| NoGetter      | Boolean  | false        | Prevents the creation of a getter method (GetXXX) |
 
 
 ### Properties
