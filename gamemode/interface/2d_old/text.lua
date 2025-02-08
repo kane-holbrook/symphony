@@ -35,8 +35,6 @@ function PANEL:CalculateName()
 end
 
 function PANEL:Paint(w, h)
-    --Rect.Paint(self, w, h)
-
     surface.SetTextColor(self.FuncEnv.FontColor)
     surface.SetFont(self.FuncEnv.Font)
 
@@ -59,6 +57,25 @@ function PANEL:ParseContent(text, node, ctx)
     self:SetProperty("Content", text)
 end
 vgui.Register("Text", PANEL, "Rect")
+
+
+local function RegisterTypography(name, size, weight)
+    vgui.Register(name, {
+        Init = function(self)
+            self:SetProperty("FontSize", size)
+            self:SetProperty("FontWeight", weight)
+        end
+    }, "Text")
+end
+
+RegisterTypography("h1", 14, 700)
+RegisterTypography("h2", 12, 700)
+RegisterTypography("h3", 10, 700)
+RegisterTypography("h4", 8, 700)
+RegisterTypography("h5", 6, 700)
+RegisterTypography("h6", 5, 700)
+RegisterTypography("p", 6, 400)
+RegisterTypography("small", 4.5, 400)
 
 local wp = vgui.GetWorldPanel()
 

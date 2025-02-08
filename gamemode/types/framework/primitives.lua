@@ -216,29 +216,6 @@ end
 PopulateMetaTable(FindMetaTable("VMatrix"), MATRIX)
 
 
-
-local PANEL = Type.Register("Panel", PRIMITIVE, {
-    Code = TYPE_PANEL,
-    DatabaseType = "TEXT"
-})
-
-function PANEL:Parse(value)
-    return error("Not implemented")
-end
-
-function PANEL:DatabaseEncode(value)
-    return error("Not implemented")
-    --return string.format("%q", util.TableToJSON(value:ToTable()))
-end
-
-function PANEL:DatabaseDecode(value)
-    return error("Not implemented")
-    --return Matrix:Parse(value)
-end
-
-PopulateMetaTable(FindMetaTable("VMatrix"), MATRIX)
-
-
 local TABLE = Type.Register("Table", nil, { Code = TYPE_TABLE, DatabaseType = "JSON" })
 
 function TABLE:Serialize(value, ply, root)

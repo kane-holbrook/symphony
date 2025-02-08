@@ -1,6 +1,8 @@
 AddCSLuaFile()
 DeriveGamemode("sandbox")
 
+print("Loaded gamemode")
+
 SYMPHONY = true
 
 -- Type
@@ -59,7 +61,7 @@ function sym.log(type, content, data, time, realm)
 end
 
 function PrintAndReturn(...)
-    print(...)
+    print("P&R", ...)
     return ...
 end
 
@@ -76,6 +78,7 @@ IncludeEx("lib/uuid.lua", Realm.Shared)
 IncludeEx("lib/materialex.lua", Realm.Shared)
 IncludeEx("lib/drawex.lua", Realm.Shared)
 xml2lua = IncludeEx("lib/xml2lua/xml2lua.lua", Realm.Shared)
+neonate = IncludeEx("lib/neonate.lua", Realm.Shared)
 
 Circles = IncludeEx("lib/circles.lua", Realm.Shared)
 
@@ -86,11 +89,12 @@ IncludeEx("types/framework/proxy.lua", Realm.Shared)
 IncludeEx("types/framework/primitives.lua", Realm.Shared)
 IncludeEx("types/framework/promise.lua", Realm.Shared)
 IncludeEx("types/framework/rpc.lua", Realm.Shared)
+IncludeEx("types/framework/collections.lua", Realm.Shared)
 IncludeEx("types/framework/datetime.lua", Realm.Shared)
 IncludeEx("core/sv_database.lua", Realm.Server)
 IncludeEx("interface/interface.lua", Realm.Shared)
 IncludeEx("core/sh_tests.lua", Realm.Shared)
 
-IncludeEx("views/setup/shared.lua", Realm.Shared)
+--IncludeEx("views/setup/shared.lua", Realm.Shared)
 
 print("___LOAD____")

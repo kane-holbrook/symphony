@@ -51,15 +51,17 @@ function PANEL:Init()
     self.Uuid = uuid()
     self.Children = {}
     self.Transitions = {}
+    self.LastPaint = CurTime()
     self.PropertyCache = {}
     
     self:SetProperty("Flex", 7)
     self:SetProperty("Direction", "X")
+    self:SetProperty("Background", color_transparent)
     self.EventBus = new(Type.EventBus)
 end
 Rect.Init = PANEL.Init
 
-function PANEL:SetProperty(name, value)
+function PANEL:SetProperty(name, value, transient)
     assert(name, "Must provide a property name")
     
     self.Properties = self.Properties or {} 
@@ -150,6 +152,14 @@ function PANEL:SetPropertyOption(name, key, value)
     self.Properties[name] = p
 end
 Rect.SetPropertyOption = PANEL.SetPropertyOption
+
+function PANEL:Transition(property, to, duration, easing)
+    local t= {}
+    t.value = self:GetProperty(property, true)
+    t.tween = neonate.new(duration, t.value, to, easing)
+    self.Transitions[property] = t
+end
+Rect.Transition = PANEL.Transition
 
 -- Children management
 function PANEL:GenerateChildrenCache(child, force)
@@ -373,14 +383,16 @@ Rect.CalculateSize = PANEL.CalculateSize
 
 function PANEL:GenerateMaterial(name, func, w, h)
     timer.Create(self.Uuid .. name, 1, 1, function ()
-        print("Generating", self.Uuid, name)
+        if not IsValid(self) then
+            return
+        end
+
         local result = func(w, h)
 
         if istable(result) then
             for k, v in pairs(result) do
                 if not IsColor(v) and v:GetInt("_loading") == 1 then
                     self:GenerateMaterial(name, func, w, h)
-                    print(" -> Skip")
                     return
                 end
             end
@@ -390,6 +402,20 @@ function PANEL:GenerateMaterial(name, func, w, h)
                     if IsColor(v) then
                         surface.SetDrawColor(v)
                         surface.DrawRect(0, 0, w, h)
+                    elseif istable(v) then
+                        print("Result is a table!")
+                        for k2, v2 in pairs(v) do
+                            if IsColor(v2) then
+                                surface.SetDrawColor(v2)
+                                surface.DrawRect(0, 0, w, h)
+                            else
+                                error("Material still loading")
+
+                                surface.SetMaterial(v2)
+                                surface.SetDrawColor(color_white)
+                                surface.DrawTexturedRect(0, 0, w, h)
+                            end
+                        end
                     else
                         if v:GetInt("_loading") == 1 then
                             continue
@@ -747,10 +773,32 @@ NUM_STENCILS = 0
 
 local matBlurScreen = Material("pp/blurscreen")
 function PANEL:Paint(w, h)
+    for k, v in pairs(self.Transitions) do
+        local dt = CurTime() - self.LastPaint
+        local finished = v.tween:update(dt)
+        self:SetProperty(k, v.value)
+
+        if finished then
+            self.Transitions[k] = nil
+        end
+    end
 
     -- Stencils eat xxx frames 
 
     local stencil
+    self:StartStencil(w, h)
+
+    self:PaintBackground(w, h)
+
+    self:FinishStencil()
+
+    self.LastPaint = CurTime()
+end
+
+function PANEL:StartStencil(w, h, x, y)
+    x = x or 0
+    y = y or 0
+
     local btl, btr, bbr, bbl = self:CalculateBorderRadius()
     if btl or btr or bbr or bbl then
         stencil = true
@@ -772,18 +820,21 @@ function PANEL:Paint(w, h)
         
         surface.SetDrawColor(color_black)
         surface.DrawPoly(drawex.RoundedBox(0, 0, w, h, btl or 0, btr or 0, bbr or 0, bbl or 0))
-        -- drawex.DrawPolyRoundedBox(0, 0, w, h, btl or 0, btr or 0, bbr or 0, bbl or 0)
         
         render.SetStencilFailOperation(STENCILOPERATION_KEEP)
         render.SetStencilCompareFunction(invert and STENCILCOMPARISONFUNCTION_NOTEQUAL or STENCILCOMPARISONFUNCTION_EQUAL)
 
         surface.SetDrawColor(255, 255, 255, 255)
     end
+end
 
-    self:PaintBackground(w, h)
+function PANEL:FinishStencil()
+    render.SetStencilEnable(false)
+end
 
-    if stencil then
-        render.SetStencilEnable(false)
+function PANEL:PaintBorder(w, h)
+    local border = self:GetProperty("Border")
+    if border then
     end
 end
 
@@ -797,7 +848,8 @@ function PANEL:PaintBackground(w, h)
                 surface.DrawRect(0, 0, w, h)
                 self.BackgroundInit = 0
             else
-                if bg.GetInt and bg:GetInt("_loading") ~= 1 then
+                bg = self.Background
+                if bg and bg.GetInt and bg:GetInt("_loading") ~= 1 then
                     surface.SetMaterial(bg)
                     surface.SetDrawColor(color_white)
                     surface.DrawTexturedRect(0, 0, w, h)

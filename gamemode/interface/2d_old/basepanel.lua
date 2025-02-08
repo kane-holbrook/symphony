@@ -196,8 +196,8 @@ do
 
         if parent then
             setmetatable(FuncEnv, { __index = parent.FuncEnv })
-            FuncEnv.PW = parent:GetWide()
-            FuncEnv.PH = parent:GetTall()
+            FuncEnv.PW = parent:GetWide() - (parent:GetProperty("PaddingLeft", true) or 0) - (parent:GetProperty("PaddingRight", true) or 0)
+            FuncEnv.PH = parent:GetTall() - (parent:GetProperty("PaddingTop", true) or 0) - (parent:GetProperty("PaddingBottom", true) or 0)
             FuncEnv.Parent = parent
         end
         
@@ -539,7 +539,6 @@ function Interface.Extent4(value)
         r = l
     end
 
-    print(Interface.ExtentW(l), Interface.ExtentH(t), Interface.ExtentW(r), Interface.ExtentH(b))
     return Interface.ExtentW(l), Interface.ExtentH(t), Interface.ExtentW(r), Interface.ExtentH(b)    
 end
 

@@ -99,6 +99,12 @@ do
 		return "Type[" .. self.Name .. "]"
 	end
 
+	function TYPE:__call(...)
+		if self.OnTypeCalled then
+			return self.OnTypeCalled(...)
+		end
+	end
+
 	TYPE.Ancestry = {} -- @test Type.Register
 
 	-- Properties
@@ -107,22 +113,34 @@ do
 
 	-- @test Type.Register
 	function TYPE:CreateProperty(name, type, options)
+		options = options or {}
 		local prop = {
 			Name = name,
 			Type = type,
-			Options = options or {}
+			Options = options
 		}
 
-		self.Prototype["Set" .. name] = function (self, value)
-			self:SetProperty(name, value)
+		if not options.NoSetter then
+			self.Prototype["Set" .. name] = function (self, value, ...)
+				self:SetProperty(name, value, ...)
+			end
 		end
 
-		self.Prototype["Get" .. name] = function (self)
-			return self:GetProperty(name)
+		if not options.NoGetter then
+			self.Prototype["Get" .. name] = function (self, ...)
+				return self:GetProperty(name, ...)
+			end
 		end
 
-		table.insert(self.Properties, prop)
+		if options.Priority then
+			table.insert(self.Properties)
+			table.SortByMember(self.Properties, "Priority") -- This breaks priorities
+		else
+			table.insert(self.Properties, prop)
+		end
+
 		self.PropertiesByName[name] = prop
+		return prop
 	end
 
 	function TYPE:GetProperties()
