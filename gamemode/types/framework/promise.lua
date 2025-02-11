@@ -12,8 +12,6 @@ do
 
     -- @test sh_tests/Promises
     function Promise.Prototype:Initialize()
-        base()
-
         self.Events = Type.New(Type.EventBus)
         self.awaits = {}
         self.coroutines = {}
@@ -49,7 +47,7 @@ do
     function Promise.Prototype:ThrowError(err)
         timer.Remove(self:GetId())
         err = err .. "\n" .. debug.traceback()
-        self.Events:Invoke("Error", err)
+        self.Events:Run("Error", err)
         self:SetError(err)
 
         return err

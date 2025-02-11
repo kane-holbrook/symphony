@@ -13,6 +13,27 @@ Panel:CreateProperty("Children", Type.Table)
 Panel:CreateProperty("Panel", Type.Panel)
 Panel:CreateProperty("Display", Type.Boolean)
 
+function Panel:Apply(t, id)
+    local mt = table.Copy(self.Metamethods)
+    mt.Id = id or uuid()
+    mt.Type = self
+    local super = self:GetSuper()
+    mt.Base = super.Prototype
+    print(super, mt.Base)
+
+    mt.__index = mt -- The object should point at this metatable (so the object itself can remain clean).
+    setmetatable(mt, {
+        __index = self.Prototype -- However, if keys aren't found on the MT, they should be pulled from the proto.
+    })
+
+    setmetatable(t, mt)
+    self.InstanceCount = self.InstanceCount + 1
+    self.Instances[self.InstanceCount] = t
+    Type.Instances[t:GetId()] = t
+    t:Initialize()
+    return t
+end
+
 -- BasePanel properties
 do
     Panel:CreateProperty("X", Type.Number, { Set = BasePanel.SetX, Get = BasePanel.GetX })
@@ -94,15 +115,13 @@ end
 function Interface.Create(classname, parent, name)
     assert(isstring(classname), "Classname must be the name of a panel i.e. DHTML")
     
-    local p = new(Type.ShadowPanel)
+    local p = new(Interface.Components[classname])
     p:SetParent(parent)
 
     return p
 end
 
 function Panel.Prototype:Initialize()
-    base()
-
     self.Events = new(Type.EventBus)
     self.Transitions = {}
     self.DefaultTransitions = {}
@@ -143,7 +162,8 @@ function Panel.Prototype:SetProperty(name, value, noTransition, noRefresh)
         return self:Transition(name, value, dt[1], dt[2])
     end
 
-    self:GetBase().SetProperty(self, name, value)
+    base(self, "SetProperty", name, value)
+
     self.ChangedProperties[name] = true
     
     if not noRefresh then
@@ -359,21 +379,11 @@ end
 Interface.Components["Panel"] = Panel
 
 
-function Interface.Register(classname, panelTable, baseName)
+function Interface.Register(classname, baseName, options)
     local base = Interface.Components[baseName]
     assert(base, "Base panel " .. baseName .. " does not exist")
 
-    local p = Type.Register(classname, base, panelTable)
+    local p = Type.Register(classname, base, options)
     Interface.Components[classname] = p
     return p
 end
-
--- Testing
-if IsValid(p) then
-    p:Remove()
-end
-p = Interface.Create("Panel")
-p:SetX(500)
-p:SetY(500)
-p:SetWidth(100)
-p:SetHeight(100)

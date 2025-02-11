@@ -43,10 +43,13 @@ SYMPHONY = true
 
 sym = sym or {}
 
-function Benchmark(f)
+function Benchmark(f, n)
     local s = SysTime()
-    f()
-    return SysTime() - s
+    n = n or 1
+    for i=1, n do
+      f()
+    end
+    print(SysTime() - s)
 end
 
 local Logged = {}

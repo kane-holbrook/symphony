@@ -71,7 +71,7 @@ do
 
 		Type.Instances[t:GetId()] = t
 
-		t:Invoke("Initialize")
+		t:Initialize()
 		return t
 	end
 
@@ -163,6 +163,8 @@ do
 
 	-- Prototype
 	TYPE.Prototype = {}
+	setmetatable(TYPE.Prototype, { Type = TYPE })
+
 	-- @test Type.Register
 	function TYPE:GetPrototype()
 		return self.Prototype
@@ -382,34 +384,76 @@ local OBJ = TYPE.Prototype
 do
 	-- @test Type.New
 	function OBJ:Initialize()
-		base()
+		base(self, "Initialize")
 	end
 
 	-- Single threaded so this isn't a problem
 	local base__Name
 	local base__Source
 	local base__Next
-	local base__Args
+	local base__Depth = 0
 
 	-- @test Type.New
-	function base(name, ...)
-		name = name or base__Name
+	function base(self, name, ...)
 		
-		local src = base__Source
-		
-		assert(name, "base() called without a name")
-		assert(src, "base() called without a source")
-		assert(base__Next, "base() called without a next")
+		local top = false
 
-		base__Next = base__Next:GetBase()
+		-- If we're calling it for the first time, we're the bottom-most object.
+		if self ~= base__Source or name ~= base__Name then
 
-		if not base__Next then
-			base__Name = nil
-			base__Source = nil
-			base__Args = nil
-		elseif base__Next[name] then
-			base__Next[name](src, unpack(base__Args))
+			base__Depth = base__Depth + 1
+			local p = self
+			while p do
+
+				local mt = getmetatable(p)
+				assert(mt)
+
+				if p[name] then
+					base__Next = p
+					break
+				end
+
+				p = mt.Base
+			end
+
+			if not base__Next then
+				return
+			end
+
+			
+			base__Source = self
+			base__Name = name
+
+			top = true
 		end
+	
+		assert(self.GetBase, "base() called without self")
+		assert(base__Name, "base() called without a name", 2)
+		assert(base__Source, "base() called without a source", 2)
+		assert(base__Next, "base() called without a next", 2)
+
+		local src = base__Source
+		base__Next = getmetatable(base__Next).Base
+
+		local out = {}
+		if base__Next and base__Next[base__Name] then
+			this = base__Next
+			base__Depth = base__Depth + 1
+			out = { base__Next[name](src, ...) }
+			base__Depth = base__Depth - 1
+			base__Source = src
+			base__Name = name
+		end
+
+		if top then
+			base__Source = nil
+			base__Next = nil
+			base__Name = nil
+			this = nil
+			base__Depth = base__Depth - 1
+		end
+
+		return unpack(out)
 	end
 
 	-- @test Type.New
@@ -438,7 +482,10 @@ do
 
 		local old = self[name]
 		self[name] = value
-		self:Invoke("OnPropertyChanged", name, value, old)
+		self:OnPropertyChanged(name, value, old)
+	end
+
+	function OBJ:OnPropertyChanged(name, value, old)
 	end
 
 	function OBJ:GetProperty(name)
@@ -448,27 +495,6 @@ do
 	function OBJ:GetLastRefresh()
 		local mt = getmetatable(self)
 		return mt.LastRefresh
-	end
-
-	-- @test Type.New
-	function OBJ:Invoke(event, ...)
-		if IsPrimitive(self, true) then
-			return
-		end
-
-		if self[event] then
-			base__Name = event
-			base__Source = self
-			base__Next = self
-			base__Args = {...}
-
-			self[event](self, ...)
-			
-			base__Name = nil
-			base__Source = self
-			base__Next = nil
-			base__Args = nil
-		end
 	end
 
 	-- @test Type.New
@@ -575,7 +601,7 @@ do
 		t.Super = super
 		t.Properties = setmetatable({}, { __index = super.Properties })
 		t.PropertiesByName = setmetatable({}, { __index = super.PropertiesByName })
-		t.Prototype = setmetatable({}, { __index = super.Prototype })
+		t.Prototype = setmetatable({}, { __index = super.Prototype, Type = t, Super = super, Base = super.Prototype })
 		t.Metamethods = table.Copy(super.Metamethods)
 		t.Derivatives = {}
 		t.Instances = {}
@@ -775,7 +801,6 @@ end
 local DISP = Type.Register("Disposable")
 do
 	function DISP.Prototype:Initialize()
-		base()
 		local mt = getmetatable(self)
 		mt.userdata = newproxy(true)
 		getmetatable(mt.userdata).__gc = function ()
@@ -825,6 +850,10 @@ hook.Add("Test.Register", "Types", function ()
 		local t = Type.Register("Life", nil, { TestOption = true })
 		t:CreateProperty("CanFly")
 
+		function t.Prototype:Initialize()
+			self.Test = true
+		end
+
 		function t.Prototype:Fly()
 			return self:GetCanFly() or false
 		end
@@ -832,7 +861,20 @@ hook.Add("Test.Register", "Types", function ()
 		local t2 = Type.Register("Mammal", t)
 		Test.Equals(t2:GetOptions()["TestOption"], true)
 
+		function t2:Initialize()
+			base(self, "Initialize")
+			self.Test2 = true
+			Test.Equals(self.Test, true)
+		end
+
 		local t3 = Type.Register("Human", t2, { TestOption = 32 })
+		function t3:Initialize()
+			base(self, "Initialize")
+			self.Test3 = true
+			Test.Equals(self.Test, true)
+			Test.Equals(self.Test2, true)
+		end
+
 		function t3.Prototype:PlayGMod()
 			return true
 		end
@@ -844,8 +886,10 @@ hook.Add("Test.Register", "Types", function ()
 
 		local t4 = Type.Register("Bird", t)
 		function t4.Prototype:Initialize()
-			base()
+			Test.Equals(self.Test, nil)
+			base(self, "Initialize")
 			self:SetCanFly(true)
+			Test.Equals(self.Test, true)
 		end
 		Test.Equals(t4:GetOptions()["TestOption"], true)
 

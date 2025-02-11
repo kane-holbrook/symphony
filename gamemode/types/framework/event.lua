@@ -6,7 +6,6 @@ EVENTRESULT:CreateProperty("Name")
 
 local EVENTBUS = Type.Register("EventBus")
 function EVENTBUS.Prototype:Initialize()
-    base()
 end
 
 function EVENTBUS.Prototype:Hook(name, func, id, priority)

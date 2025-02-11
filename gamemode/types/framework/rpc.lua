@@ -45,7 +45,7 @@ function RPC.Get(name)
 end
 
 function RPC.Metamethods:__tostring()
-    return "RPC[" .. self:GetName() .. "]"
+    return "RPC[" .. tostring(self:GetName()) .. "]"
 end
 
 RPC.Register("Test.RPC", Realm.Server, function (ply, a, b, asPromise)
