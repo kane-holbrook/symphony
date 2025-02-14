@@ -37,7 +37,7 @@ In keeping to how GMod handles entities, the logic for what happens when an inst
 
 The third optional parameter (options) to Type.Register is a table; they're used by other parts of the system to drive certain functionality, like what database table it should synchronize with.
 
-The default options that come out of the box with Symphony are:
+Some default options that come out of the box with Symphony are:
 | Key           | Type     | Default      | Description                                       |
 | ------------- | -------- | ------------ | ------------------------------------------------- |
 | Table         | String   | nil          | Binds this type to a specific MySQL table (aka defines ORM binding)        |

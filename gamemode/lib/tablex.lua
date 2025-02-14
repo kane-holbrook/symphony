@@ -130,3 +130,11 @@ function tablex.ParseSequentialOrNamedArgs(t, mapping)
     end
     return unpack(out)
 end
+
+function tablex.Trim(t, c)
+    local out = {}
+    for k, v in pairs(t) do
+        out[k] = isstring(v) and string.Trim(v, c) or v
+    end
+    return out
+end

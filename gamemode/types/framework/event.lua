@@ -58,6 +58,10 @@ end
 function EVENTBUS.Prototype:Run(name, ...)
     local h = self[name]
     
+    if name ~= "*" then
+        self:Run("*", name, ...)
+    end
+
     local er = Type.New(EVENTRESULT)
     er:SetName(name)
     er:SetData({...})

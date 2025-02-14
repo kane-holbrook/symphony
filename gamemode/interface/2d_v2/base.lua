@@ -9,115 +9,25 @@ local BasePanel = FindMetaTable("Panel")
 
 local Panel = Type.Register("ShadowPanel", nil, { VGUI = "Panel" })
 Panel:CreateProperty("Parent", Panel)
+Panel:CreateProperty("Ref", Type.String)
+Panel:CreateProperty("FullyQualifiedRef", Type.String) 
 Panel:CreateProperty("Children", Type.Table)
 Panel:CreateProperty("Panel", Type.Panel)
-Panel:CreateProperty("Display", Type.Boolean)
-
-function Panel:Apply(t, id)
-    local mt = table.Copy(self.Metamethods)
-    mt.Id = id or uuid()
-    mt.Type = self
-    local super = self:GetSuper()
-    mt.Base = super.Prototype
-    print(super, mt.Base)
-
-    mt.__index = mt -- The object should point at this metatable (so the object itself can remain clean).
-    setmetatable(mt, {
-        __index = self.Prototype -- However, if keys aren't found on the MT, they should be pulled from the proto.
-    })
-
-    setmetatable(t, mt)
-    self.InstanceCount = self.InstanceCount + 1
-    self.Instances[self.InstanceCount] = t
-    Type.Instances[t:GetId()] = t
-    t:Initialize()
-    return t
-end
-
+Panel:CreateProperty("Propagate", Type.Boolean)
+Panel:CreateProperty("Display", Type.Boolean, { Priority = 9999 } )
 
 -- BasePanel properties
 do
-    Panel:CreateProperty("Ref", Type.String)
-    Panel:CreateProperty("Width", Type.Number, { Set = BasePanel.SetWide, Get = BasePanel.GetWide })
-    Panel:CreateProperty("Height", Type.Number, { Set = BasePanel.SetTall, Get = BasePanel.GetTall })
-    Panel:CreateProperty("X", Type.Number, { Set = BasePanel.SetX, Get = BasePanel.GetX })
-    Panel:CreateProperty("Y", Type.Number, { Set = BasePanel.SetY, Get = BasePanel.GetY })
-    Panel:CreateProperty("Alpha", Type.Number, { Set = BasePanel.SetAlpha, Get = BasePanel.GetAlpha })
-    Panel:CreateProperty("PaintDragging", Type.Boolean, { NoSetter = true, Get = function (p) return p.PaintDragging end })
-    Panel:CreateProperty("DockMargin", Type.Table, { Set = function (p, t) 
-        if t then
-            p:DockMargin(unpack(t)) 
-        end 
-    end, Get = function (p) 
-        return { p:GetDockMargin() } 
-    end })
-    Panel:CreateProperty("DockPadding", Type.Table, { Set = function (p, t) 
-        if t then
-            p:DockPadding(unpack(t)) 
-        end 
-    end, Get = function (p) 
-        return { p:GetDockPadding() } 
-    end })
-    Panel:CreateProperty("Dock", Type.Number, { Set = BasePanel.Dock, Get = BasePanel.GetDock, NoNil = true })
-    Panel:CreateProperty("Autodelete", Type.Boolean, { Set = BasePanel.SetAutoDelete, Get = BasePanel.GetAutoDelete, NoNil = true }) -- Does GetAutoDelete exist?
-    Panel:CreateProperty("ConVar", Type.String, { Set = BasePanel.SetConVar, Get = BasePanel.GetConVar })
-    Panel:CreateProperty("CookieName", Type.String, { Set = BasePanel.SetCookie, Get = BasePanel.GetCookie })
-    Panel:CreateProperty("Cursor", Type.String, { Set = BasePanel.SetCursor, Get = BasePanel.GetCursor })
-    Panel:CreateProperty("DragParent", Type.Panel, { Set = BasePanel.SetDragParent, Get = BasePanel.GetDragParent })
-    Panel:CreateProperty("DrawOnTop", Type.Boolean, { Set = BasePanel.SetDrawOnTop, Get = BasePanel.GetDrawOnTop })
-    Panel:CreateProperty("Enabled", Type.Boolean, { Set = BasePanel.SetEnabled, Get = BasePanel.GetEnabled })
-    Panel:CreateProperty("FocusTopLevel", Type.Boolean, { Set = BasePanel.SetFocusTopLevel, Get = BasePanel.GetFocusTopLevel })
-    Panel:CreateProperty("KeyboardInputEnabled", Type.Boolean, { Set = BasePanel.SetKeyboardInputEnabled, Get = BasePanel.GetKeyboardInputEnabled })
-    Panel:CreateProperty("MouseInputEnabled", Type.Boolean, { Set = BasePanel.SetMouseInputEnabled, Get = BasePanel.GetMouseInputEnabled })
-    Panel:CreateProperty("MinimumSize", Type.Table, { Set = function (p, t) return p:SetMinimumSize(unpack(t)) end, Get = BasePanel.GetMouseInputEnabled })
-    Panel:CreateProperty("Name", Type.String, { Set = BasePanel.SetName, Get = BasePanel.GetName })
-    Panel:CreateProperty("PaintedManually", Type.Boolean, { Set = BasePanel.SetPaintedManually, Get = BasePanel.GetPaintedManually })
-    Panel:CreateProperty("RenderInScreenshots", Type.Boolean, { Set = BasePanel.SetRenderInScreenshots, Get = BasePanel.GetRenderInScreenshots })
-    Panel:CreateProperty("Selected", Type.Boolean, { Set = BasePanel.SetSelected, Get = BasePanel.GetSelected })
-    Panel:CreateProperty("Skin", Type.String, { Set = BasePanel.SetSkin, Get = BasePanel.GetSkin })
-    Panel:CreateProperty("TabPosition", Type.Number, { Set = BasePanel.SetTabPosition, Get = BasePanel.GetTabPosition })
-    Panel:CreateProperty("Tooltip", Type.String, { Set = BasePanel.SetTooltip, Get = BasePanel.GetTooltip })
-    Panel:CreateProperty("TooltipDelay", Type.Number, { Set = BasePanel.SetTooltipDelay, Get = BasePanel.GetTooltipDelay })
-    Panel:CreateProperty("TooltipPanel", Type.Panel, { Set = BasePanel.SetTooltipPanel, Get = BasePanel.GetTooltipPanel })
-    Panel:CreateProperty("TooltipOverride", Type.String, { Set = BasePanel.SetTooltipOverride, Get = BasePanel.GetTooltipOverride })
-    Panel:CreateProperty("Visible", Type.Boolean, { Set = BasePanel.SetVisible, Get = BasePanel.GetVisible })
-    Panel:CreateProperty("ZPos", Type.Number, { Set = BasePanel.SetZPos, Get = BasePanel.GetZPos })
-    Panel:CreateProperty("NoClipping", Type.Boolean, { Set = BasePanel.SetNoClipping, Get = BasePanel.GetNoClipping })
-    Panel:CreateProperty("MouseCapture", Type.Boolean, { Set = BasePanel.SetMouseCapture, Get = BasePanel.GetMouseCapture })  
+    Panel:CreateProperty("Width", Type.Number, { Set = BasePanel.SetWide, Get = BasePanel.GetWide, Emit = "Resize", Listen = { "Resize", "Parent:Resize" } })
+    Panel:CreateProperty("Height", Type.Number, { Set = BasePanel.SetTall, Get = BasePanel.GetTall, Emit = "Resize", Listen = { "Resize", "Parent:Resize" } })
+    Panel:CreateProperty("X", Type.Number, { Set = BasePanel.SetX, Get = BasePanel.GetX, Listen = { "Resize", "Parent:Resize" } })
+    Panel:CreateProperty("Y", Type.Number, { Set = BasePanel.SetY, Get = BasePanel.GetY, Listen = { "Resize", "Parent:Resize" } })
+    Panel:CreateProperty("Fill", Type.Color)
 end
-
--- Achievement
--- AllowNonAsciiCharacters
--- BGColor - RichText, Label, DColorCube
--- SpawnIcon
--- PaintBackgroundEnabled, PaintBorderEnabled
--- ContentAlignment DLabel
--- CaretPos
--- DrawLanguageID
--- HTML
--- RichText: LineHeight
--- MaximumCharCount
--- MinimumSize?
--- Model
--- SteamID - AvatarImage
--- Multiline
--- Text
--- TextInset
--- TextSelectionColors
--- URL
--- VerticalScrollbarEnabled
--- URL
--- UnderlineFont
--- Wrap
-
--- Receiver and Droppable will need to be tags.
-
-
 
 function Interface.Create(classname, parent, name)
     assert(isstring(classname), "Classname must be the name of a panel i.e. DHTML")
     
-    print(classname)
     local p = new(Interface.Components[classname])
     p:SetParent(parent)
 
@@ -126,20 +36,35 @@ end
 
 function Panel:CreateFromNode(parent, node, ctx)
     local el = Interface.Create(self:GetName(), parent)
-    local props = self:GetPropertiesMap()
 
     node.Attributes = node.Attributes or {}
     node.Children = node.Children or {}
 
-    for k, v in pairs(node.Attributes) do
-        local p = props[k]
-        
+    local skip = {}
+
+    for _, prop in pairs(self:GetProperties()) do
+        local k = prop.Name
+        local v = node.Attributes[k]
+
+        if not v then
+            v = node.Attributes[":" .. k]
+
+            if not v then
+                continue
+            end
+
+            skip[":" .. k] = true
+            k = ":" .. k
+        else
+            skip[k] = true
+        end
+
         -- : is computed
         if string.StartsWith(k, ":") then
-            k = string.sub(k, 2)
-            
-            local f = CompileString("return " .. v, "ComputedProperty")
+            k = string.sub(k, 2)        
+            local f = CompileString("return " .. v, "Property[" .. k .. "]")
             el:SetPropertyComputed(k, f)
+            el:ComputeProperty(k)
         elseif string.StartsWith(k, "Transition:") then
             k = string.sub(k, 11)
             local easing, duration = unpack(string.Split(v, " "))
@@ -154,97 +79,144 @@ function Panel:CreateFromNode(parent, node, ctx)
             local func = CompileString("return " .. v, k)
             el.Events:Hook(name, func())
         else
-            assert(p, "Property " .. k .. " does not exist on " .. self:GetName())
-            if p.Options.Parse then
-                v = p.Options.Parse(v)
+            assert(prop, "Property " .. k .. " does not exist on " .. self:GetName())
+
+            if prop.Options.Parse then
+                v = prop.Options.Parse(v)
                 if isfunction(v) then
                     el:SetPropertyComputed(k, v)
-                    continue
+                    return
                 end
-            elseif p.Type then
-                v = p.Type:Parse(v)
+            elseif prop.Type then
+                v = prop.Type:Parse(v)
             end
 
-            el:SetProperty(k, v, true, true)
-        end
+            el:SetProperty(k, v)
+        end        
     end
 
     for k, v in pairs(node.Children) do
-        Interface.CreateFromNode(el, v)
+        self:ParseNodeChild(el, v, ctx)
     end
 
     return el
 end
 
+function Panel:ParseNodeChild(el, child, ctx)
+    return Interface.CreateFromNode(el, child)
+end
+
+function Panel:IsVirtual()
+    return self:GetOptions().VGUI == false
+end
+
+local DefaultParent = {
+    Width = ScrW(),
+    Height = ScrH()
+}
+
+hook.Add("OnScreenSizeChanged", "Interface.OnScreenSizeChanged", function()
+    DefaultParent.Width = ScrW()
+    DefaultParent.Height = ScrH()
+end)
+
 function Panel.Prototype:Initialize()
     
     self.Env = setmetatable({
-        self = self
+        self = self,
+        Parent = DefaultParent
     }, { __index = _G })
 
     self.Events = new(Type.EventBus)
+    self.Events:Hook("*", function (...)
+        self:ReceiveEvent(...)
+    end)
     self.Transitions = {}
     self.DefaultTransitions = {}
-    self.ChangedProperties = {}
     self.ComputedProperties = {}
     self._LastPaint = CurTime() 
 
-    self:SetParent(nil)
     self:SetChildren({})
     self:SetX(0)
     self:SetY(0)
-    self:SetAlpha(255)
+    self:SetWidth(128)
+    self:SetHeight(128)
+    self:SetFill(Color(0, 0, 0, 64))
     self:SetDisplay(true)
-    
-    self:Refresh({ Force = true })
+    self:SetPropagate(true)
 end
 
-function Panel.Prototype:Emit(name, ...)
-    local er = self.Events:Run(name, self, ...)
-    if er:GetCancelled() then
-        return er
-    end
+function Panel.Prototype:ReceiveEvent(name, ...)
+    local args = {...}
 
-    local parent = self:GetParent()
-    while IsValid(parent) do
-        er = parent.Events:Run("Child:" .. name, self, ...)
-        if er:GetCancelled() then
-            return er
-        end
-        parent = parent:GetParent()
+    if name == "ChildAdded" then
+        local el = args[1]
+        print(el:GetRef())
     end
+end
+
+
+function Panel.Prototype:IsValid()
+    return self._Removed ~= true
 end
 
 function Panel.Prototype:GetEnv()
     return self.Env
 end
 
-function Panel.Prototype:GetValue(name)
-    local p = self:GetPanel()
-    if p then
-        local prop = self:GetType():GetPropertiesMap()[name]
-        if prop and prop.Options.Get then
-            return prop.Options.Get(p)
-        end
-    end
-    return self[name]
+function Panel.Prototype:EmitNoPropagate(name, ...)
+    local er = self.Events:Run(name, ...)
+    return er
 end
 
-function Panel.Prototype:SetProperty(name, value, noTransition, noRefresh)
-    self.Transitions[name] = nil
+function Panel.Prototype:Emit(name, ...)
+    assert(name, "Event name must be provided")
 
+    local er = self:EmitNoPropagate(name, ...)
+    if er:GetCancelled() or not self:GetPropagate() then
+        return er
+    end
+    
+    local parent = self:GetParent()
+    while IsValid(parent) do
+        er = parent.Events:Run("Child:" .. name, self, ...)
+        
+        if er:GetCancelled() then
+            return er
+        end
+        parent = parent:GetParent()
+    end
+
+    for k, v in pairs(self:GetChildren()) do
+        if not IsValid(v) then
+            continue
+        end
+
+        v.Events:Run("Parent:" .. name, self, ...)
+    end
+end
+
+local function SetProperty(el, name, value)
+    local old = el[name]
+    el[name] = value
+    el.Env[name] = value
+    el:OnPropertyChanged(name, value, old)
+end
+
+function Panel.Prototype:SetProperty(name, value, immediate)
+    
+    local p = Type.GetType(self):GetPropertiesMap()[name]
+    if p and p.Type and not p.Options.NoValidate then
+        assert(value == nil or Type.Is(value, p.Type), "Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName())
+    end
+    
     local dt = self.DefaultTransitions[name]
-    if dt and not noTransition then
+    if dt and not immediate then
         return self:Transition(name, value, dt[1], dt[2])
     end
 
-    base(self, "SetProperty", name, value)
-
-    self.ChangedProperties[name] = true
-    
-    if not noRefresh then
-        self:Refresh()
-    end
+    self.Transitions[name] = nil
+    SetProperty(self, name, value)
 end
 
 function Panel.Prototype:SetPropertyTransition(name, duration, easing)
@@ -264,7 +236,26 @@ function Panel.Prototype:SetPropertyComputed(name, func)
     if func then 
         setfenv(func, self.Env)
     end
+
     self.ComputedProperties[name] = func
+    self:ComputeProperty(name)
+
+    local prop = self:GetType():GetPropertiesMap()[name]
+    local opt = prop.Options
+
+    if opt.Listen then
+        for k, v in pairs(opt.Listen) do
+            self.Events:Hook(v, function (n)
+                -- Avoid infinite limits!
+                if n == name then
+                    return
+                end
+
+                -- Recalculate whenever a parent property changes
+                self:ComputeProperty(name)
+            end)
+        end
+    end
 end
 
 function Panel.Prototype:IsPropertyComputed(name)
@@ -272,7 +263,16 @@ function Panel.Prototype:IsPropertyComputed(name)
 end
 
 function Panel.Prototype:ComputeProperty(name)
-    return self:IsPropertyComputed(name) and self.ComputedProperties[name](self) or self[name]
+    if self:IsPropertyComputed(name) then
+        local succ, result = pcall(self.ComputedProperties[name], self)
+        if not succ then
+            ErrorNoHaltWithStack(result .. "\n")
+            return
+        end
+
+        self:SetProperty(name, result)
+    end
+    return self[name]
 end
 
 function Panel.Prototype:Transition(name, to, duration, easing)
@@ -281,7 +281,6 @@ function Panel.Prototype:Transition(name, to, duration, easing)
     assert(isnumber(duration), "Duration must be a number")
 
     local t = {}
-    t.Set = self:GetType():GetPropertiesMap()[name].Options.Set
     
     if IsColor(to) then
         to = { to:ToTable() }
@@ -289,7 +288,7 @@ function Panel.Prototype:Transition(name, to, duration, easing)
         to = istable(to) and table.Copy(to) or { to }
     end
 
-    local value = self:GetValue(name)
+    local value = self:GetProperty(name)
     if IsColor(value) then
         value = value:ToTable()
         t.IsColor = true
@@ -315,165 +314,6 @@ function Panel.Prototype:GetClassName()
     return self:GetType():GetOptions().VGUI
 end
 
-function Panel.Prototype:Refresh(ctx)
-    self._ctx = self._ctx or {}
-    if ctx then
-        table.Merge(self._ctx, ctx, true)
-    end
-    ctx = self._ctx
-
-    if ctx.Immediate then
-        timer.Remove(self:GetId())
-        self:PerformRefresh(ctx)
-        self._ctx = nil
-    else
-        if not timer.Exists(self:GetId()) then
-            self._ctx = ctx
-            timer.Create(self:GetId(), 0, 1, function ()
-                timer.Remove(self:GetId()) -- In case the refresh was called again
-
-                if self._Removed then
-                    return
-                end
-                
-                self:PerformRefresh(self._ctx)
-                self._ctx = nil
-            end)
-        end
-    end
-end
-
-function Panel.Prototype:GetChildrenSize()
-    local w, h = 0, 0
-    for k, v in pairs(self:GetChildren()) do
-        local x, y = v:ComputeProperty("X"), v:ComputeProperty("Y")
-        local cw, ch = v:CalculateSize(ctx)
-        w = math.max(x + cw, w)
-        h = math.max(y + ch, h)
-    end
-    return w, h
-end
-
-function Panel.Prototype:CalculateSize(ctx)
-    local w = self:ComputeProperty("Width")
-    local h = self:ComputeProperty("Height")
-
-    if not w or not h then
-        local cw, ch = self:GetChildrenSize() 
-        
-        cw = cw + (self:ComputeProperty("PaddingLeft") or 0) + (self:ComputeProperty("PaddingRight") or 0)
-        ch = ch + (self:ComputeProperty("PaddingTop") or 0) + (self:ComputeProperty("PaddingBottom") or 0)
-
-        if not w then
-            w = cw
-        end
-
-        if not h then
-            h = ch
-        end
-    end
-
-    self.Env["Width"] = w
-    self.Env["Height"] = h
-
-    local p = self:GetPanel()
-    if IsValid(p) then
-        local cw, ch = p:GetWide(), p:GetTall()
-        if cw ~= w or ch ~= h then
-            p:SetSize(w, h)
-        end
-    end
-
-    return w, h
-end
-
-
-function Panel.Prototype:PerformRefresh(ctx)
-    local p = self:GetPanel()
-    local type = self:GetType()
-    local parent = self:GetParent()
-
-    if self:GetDisplay() and not IsValid(p) then
-        
-        if parent and not parent:GetPanel() then
-            return
-        end
-
-        local p = vgui.Create(self:GetClassName(), parent and parent:GetPanel())
-        p.Paint = function (p, w, h) self:Paint(w, h) end
-        p._ShadowPanel = self
-
-        self:SetPanel(p)
-        self:Refresh()
-        return
-    elseif not self:GetDisplay() then
-        if p then
-            if IsValid(p) then
-                self:GetPanel():Remove()
-            end
-            self:SetPanel(nil)
-        end
-        return
-    end
-    
-    if parent then
-        self.Env["PW"] = parent:GetWidth()
-        self.Env["PH"] = parent:GetHeight()
-    else
-        self.Env["PW"] = ScrW()
-        self.Env["PH"] = ScrH()
-    end
-
-    self:CalculateSize(ctx)
-
-    for _, prop in pairs(type:GetProperties()) do
-        local k = prop.Name
-        local opt = prop.Options
-
-        if opt.Skip then
-            continue
-        end
-
-        if opt.Listen and not ctx.Force then
-            local skip = true
-            for k, v in pairs(opt.Listen) do
-                if self.ChangedProperties[v] then
-                    skip = false
-                    break
-                end
-            end
-        end
-
-        local set = opt.Set
-        local get = opt.Get
-
-        -- Ignore properties that don't have a setter
-        if not set then
-            continue
-        end
-
-        self[k] = self:ComputeProperty(k)
-
-        local v = self[k]
-        local curr = get and get(p) or p[k]
-        self.Env[k] = v
-
-        -- If it has changed, set the value
-        if curr ~= v then
-            if v == nil and opt.NoNil then
-                continue
-            end
-
-            set(p, v)
-        end
-    end
-    self.ChangedProperties = {}
-
-    for k, v in pairs(self:GetChildren()) do
-        v:PerformRefresh(ctx)
-    end
-end
-
 function Panel.Prototype:Paint(w, h)
     local ct = CurTime()
     local dt = ct - self._LastPaint
@@ -488,11 +328,7 @@ function Panel.Prototype:Paint(w, h)
             val = unpack(v.Value)
         end
 
-        self[k] = val
-        if v.Set then
-            v.Set(self:GetPanel(), val)
-        end
-        self:Refresh()
+        SetProperty(self, k, val, true)
 
         if complete then
             v.Promise:Complete()
@@ -500,21 +336,69 @@ function Panel.Prototype:Paint(w, h)
         end
     end
 
+    surface.SetDrawColor(self:GetFill())
+    surface.DrawRect(0, 0, w, h)
+
+    self:EmitNoPropagate("Paint")
+
     self._LastPaint = ct
 end
 
 function Panel.Prototype:OnPropertyChanged(name, value, old)
-    --local er = self.Events:Run("OnPropertyChanged", self, name, value, old)
-    --if er:GetCancelled() then
-    --    return false
-    --end
-    local vgui = self:GetPanel()
+    local prop = self:GetType():GetPropertiesMap()[name]
+    local opt = prop.Options
+    local typeOpt = self:GetType():GetOptions()
+
+    local el = self:GetPanel()
+
+    if name == "Display" then
+        if not typeOpt.VGUI then
+            return
+        end
+
+        if value then
+            if IsValid(el) then
+                return
+            end
+
+            local parent = self:GetParent()
+            if parent and not parent:GetPanel() then
+                return
+            end
+
+            el = vgui.Create(self:GetClassName(), parent and parent:GetPanel() or nil)
+            el.Paint = function (p, w, h)
+                self:Paint(w, h)
+            end
+            el.Interface = self
+            self:SetPanel(el)
+
+            for _, p in pairs(self:GetType():GetProperties()) do
+                local opt = p.Options
+                local k = p.Name
+                local v = self:ComputeProperty(k)
+
+                if opt.Set then
+                    opt.Set(el, v)
+                end
+            end
+
+        else
+            if IsValid(el) then
+                el:Remove()
+            end
+            self:SetPanel(nil)
+        end
+        return
+
+    end
 
     if name == "Parent" then
         if old then
             for k, v in pairs(old:GetChildren()) do
                 if v == self then
                     old:GetChildren()[k] = nil
+                    old:Emit("ChildRemoved", self)
                     break
                 end
             end
@@ -524,19 +408,41 @@ function Panel.Prototype:OnPropertyChanged(name, value, old)
             setmetatable(self.Env, { __index = value.Env })
             value:GetChildren()[#value:GetChildren() + 1] = self
 
-            if IsValid(vgui) then
-                vgui:SetParent(value:GetPanel())
+            if IsValid(el) then
+                el:SetParent(value:GetPanel())
             end
+            self.Env.Parent = value.Env
 
+            value:Emit("ChildAdded", self)
         else
+            if IsValid(el) then
+                el:SetParent(nil)
+            end
+            self.Env.Parent = DefaultParent
+
             setmetatable(self.Env, { __index = _G })
         end
         return
     end
-end
 
-function Panel.Prototype:IsValid()
-    return true
+    if el and opt.Set then
+        local get = opt.Get
+        if get then
+            old = get(el)
+        end
+
+        if old ~= value and not opt.AlwaysSet then
+            opt.Set(el, value)
+        end
+    end
+
+    if not opt.Silent then
+        self:Emit("Change:" .. name, value, old)
+    end
+
+    if opt.Emit then
+        self:Emit(opt.Emit, name)
+    end
 end
 
 function Panel.Prototype:Remove()
@@ -556,4 +462,40 @@ function Interface.Register(classname, baseName, options)
     local p = Type.Register(classname, base, options)
     Interface.Components[classname] = p
     return p
+end
+
+
+local VIRTUAL = Interface.Register("Virtual", "Panel", { VGUI = false })
+
+local LISTEN = Interface.Register("Listen", "Virtual", { VGUI = false })
+LISTEN:CreateProperty("Event", Type.String)
+LISTEN:CreateProperty("Properties", Type.String)
+
+function LISTEN.Prototype:Initialize()
+    base(self, "Initialize")
+    self.Events = {}
+    self.Properties = {}
+end
+
+function LISTEN.Prototype:OnPropertyChanged(name, value, old)
+    if name == "Event" then
+        local events = string.Split(value, ",")
+        tablex.Trim(events)
+        events = table.Flip(events)
+        self.Events = events
+
+        self:GetParent().Events:Hook("*", function (name, ...)
+            if self.Events[name] then
+                for k, v in pairs(self.Properties) do
+                    self:GetParent():ComputeProperty(k)
+                end
+            end
+        end, self:GetId())
+    elseif name == "Properties" then
+        local props = string.Split(value, ",")
+        tablex.Trim(props)
+        props = table.Flip(props)
+        PrintTable(props)
+        self.Properties = props
+    end
 end

@@ -1,12 +1,8 @@
 AddCSLuaFile()
 DeriveGamemode("sandbox")
 
-print("Loaded gamemode")
-
 SYMPHONY = true
 
--- Type
--- Database
 -- Network
   -- Start
   -- Send
@@ -16,7 +12,6 @@ SYMPHONY = true
   -- CreateFromXML
   -- RegisterFromXML
   -- CreateTheme
--- Fonts
 -- Materials
 -- Blueprint
   -- Register

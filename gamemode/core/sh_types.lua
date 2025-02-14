@@ -133,10 +133,11 @@ do
 		end
 
 		if options.Priority then
+			prop.Priority = options.Priority
 			table.insert(self.Properties, prop)
 			table.SortByMember(self.Properties, "Priority") -- This breaks priorities
 		else
-			table.insert(self.Properties, prop)
+			prop.Priority = table.insert(self.Properties, prop)
 		end
 
 		self.PropertiesByName[name] = prop
@@ -819,18 +820,21 @@ do
 	function DISP.Prototype:Initialize()
 		local mt = getmetatable(self)
 		mt.userdata = newproxy(true)
-		getmetatable(mt.userdata).__gc = function ()
-			print("Dispose GC")
+		
+		local ud_mt = getmetatable(mt.userdata)
+		ud_mt.__gc = function ()
 			self:Dispose()
 		end
-		print("Init")
+
+		print("Init 11")
 	end
 
 	function DISP.Prototype:Dispose()
-		print("Disposed")
+		print("Disposed 22")
 	end
 
 end
+
 
 
 -- Set the metatable of _G to fall back to the type system.

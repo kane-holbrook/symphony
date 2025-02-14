@@ -1,0 +1,39 @@
+- I can create a new interface instance. 
+  - Programmatically ✓
+  - Via XML ✓
+- I can register a new interface.
+  - Programmatically ✓
+  - Via XML
+- Events
+  - I can emit events to my parent ✓
+  - I can emit events to my children
+  - I can stop propagation of an event by cancelling it ✓
+- Properties
+  - I can register new properties ✓
+    - I can define the order that properties should be evaluated ✓
+  - I can set/get properties ✓
+    - Via XML ✓
+    - Input is validated against the type ✓
+    - I can set a default transition/animation ✓
+      - Via XML ✓
+    - I can set a property to a piece of Lua code ✓
+      - Computed properties should have a function environment that
+        - Lets me access other properties on this object ✓
+        - Lets me access properties set on parent objects (i.e. Hovered) ✓
+        - Can access the parent width and height ✓
+          - This should be ScrW/ScrH when there is no parent. ✓
+        - Allows access to _G ✓
+      - I can define when this Lua code should run. ✓
+- Position/Size
+  - I can set an arbitrary X, Y, width and height.
+  - I can do this in:
+    - Pixels
+    - ScreenScale
+    - ScreenScaleH
+    - % of parent width or height
+    - Character widths
+    - Character heights
+- Slots
+  - I can define slots via Slot="Name" inside components.
+  - I can define a default slot that children should be added to.
+  - I can define what slot an element should override when instantiating a component.
