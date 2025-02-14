@@ -34,12 +34,14 @@ function Panel:Apply(t, id)
     return t
 end
 
+
 -- BasePanel properties
 do
-    Panel:CreateProperty("X", Type.Number, { Set = BasePanel.SetX, Get = BasePanel.GetX })
-    Panel:CreateProperty("Y", Type.Number, { Set = BasePanel.SetY, Get = BasePanel.GetY })
+    Panel:CreateProperty("Ref", Type.String)
     Panel:CreateProperty("Width", Type.Number, { Set = BasePanel.SetWide, Get = BasePanel.GetWide })
     Panel:CreateProperty("Height", Type.Number, { Set = BasePanel.SetTall, Get = BasePanel.GetTall })
+    Panel:CreateProperty("X", Type.Number, { Set = BasePanel.SetX, Get = BasePanel.GetX })
+    Panel:CreateProperty("Y", Type.Number, { Set = BasePanel.SetY, Get = BasePanel.GetY })
     Panel:CreateProperty("Alpha", Type.Number, { Set = BasePanel.SetAlpha, Get = BasePanel.GetAlpha })
     Panel:CreateProperty("PaintDragging", Type.Boolean, { NoSetter = true, Get = function (p) return p.PaintDragging end })
     Panel:CreateProperty("DockMargin", Type.Table, { Set = function (p, t) 
@@ -115,32 +117,106 @@ end
 function Interface.Create(classname, parent, name)
     assert(isstring(classname), "Classname must be the name of a panel i.e. DHTML")
     
+    print(classname)
     local p = new(Interface.Components[classname])
     p:SetParent(parent)
 
     return p
 end
 
+function Panel:CreateFromNode(parent, node, ctx)
+    local el = Interface.Create(self:GetName(), parent)
+    local props = self:GetPropertiesMap()
+
+    node.Attributes = node.Attributes or {}
+    node.Children = node.Children or {}
+
+    for k, v in pairs(node.Attributes) do
+        local p = props[k]
+        
+        -- : is computed
+        if string.StartsWith(k, ":") then
+            k = string.sub(k, 2)
+            
+            local f = CompileString("return " .. v, "ComputedProperty")
+            el:SetPropertyComputed(k, f)
+        elseif string.StartsWith(k, "Transition:") then
+            k = string.sub(k, 11)
+            local easing, duration = unpack(string.Split(v, " "))
+            if not duration then
+                duration = tonumber(easing)
+                easing = nil
+            end
+
+            el:SetPropertyTransition(k, tonumber(duration), easing)
+        elseif string.StartsWith(k, "On:") then
+            local name = string.sub(k, 4)
+            local func = CompileString("return " .. v, k)
+            el.Events:Hook(name, func())
+        else
+            assert(p, "Property " .. k .. " does not exist on " .. self:GetName())
+            if p.Options.Parse then
+                v = p.Options.Parse(v)
+                if isfunction(v) then
+                    el:SetPropertyComputed(k, v)
+                    continue
+                end
+            elseif p.Type then
+                v = p.Type:Parse(v)
+            end
+
+            el:SetProperty(k, v, true, true)
+        end
+    end
+
+    for k, v in pairs(node.Children) do
+        Interface.CreateFromNode(el, v)
+    end
+
+    return el
+end
+
 function Panel.Prototype:Initialize()
+    
+    self.Env = setmetatable({
+        self = self
+    }, { __index = _G })
+
     self.Events = new(Type.EventBus)
     self.Transitions = {}
     self.DefaultTransitions = {}
-    self.PropertyEnv = {
-        self = self
-    }
     self.ChangedProperties = {}
-    self.CalculatedProperties = {}
+    self.ComputedProperties = {}
     self._LastPaint = CurTime() 
 
     self:SetParent(nil)
     self:SetChildren({})
     self:SetX(0)
     self:SetY(0)
-    self:SetWidth(0)
-    self:SetHeight(0)
     self:SetAlpha(255)
     self:SetDisplay(true)
+    
     self:Refresh({ Force = true })
+end
+
+function Panel.Prototype:Emit(name, ...)
+    local er = self.Events:Run(name, self, ...)
+    if er:GetCancelled() then
+        return er
+    end
+
+    local parent = self:GetParent()
+    while IsValid(parent) do
+        er = parent.Events:Run("Child:" .. name, self, ...)
+        if er:GetCancelled() then
+            return er
+        end
+        parent = parent:GetParent()
+    end
+end
+
+function Panel.Prototype:GetEnv()
+    return self.Env
 end
 
 function Panel.Prototype:GetValue(name)
@@ -172,6 +248,9 @@ function Panel.Prototype:SetProperty(name, value, noTransition, noRefresh)
 end
 
 function Panel.Prototype:SetPropertyTransition(name, duration, easing)
+    assert(isstring(name))
+    assert(isnumber(duration))
+
     self.DefaultTransitions[name] = { duration, easing }
 end
 
@@ -179,15 +258,28 @@ function Panel.Prototype:GetPropertyTransition(name)
     return self.DefaultTransitions[name]
 end
 
-function Panel.Prototype:SetCalculatedProperty(name, func)
-    self.CalculatedProperties[name] = func
+function Panel.Prototype:SetPropertyComputed(name, func)
+    assert(isstring(name), "Calculated property name must be a string")
+    assert(func == nil or isfunction(func), "Calculated property must be a function")
+    if func then 
+        setfenv(func, self.Env)
+    end
+    self.ComputedProperties[name] = func
 end
 
-function Panel.Prototype:GetCalculatedProperty(name)
-    return self.CalculatedProperties[name]
+function Panel.Prototype:IsPropertyComputed(name)
+    return self.ComputedProperties[name] ~= nil
+end
+
+function Panel.Prototype:ComputeProperty(name)
+    return self:IsPropertyComputed(name) and self.ComputedProperties[name](self) or self[name]
 end
 
 function Panel.Prototype:Transition(name, to, duration, easing)
+    assert(isstring(name), "Transition name must be a string")
+    assert(to, "Transition value must be provided")
+    assert(isnumber(duration), "Duration must be a number")
+
     local t = {}
     t.Set = self:GetType():GetPropertiesMap()[name].Options.Set
     
@@ -251,13 +343,64 @@ function Panel.Prototype:Refresh(ctx)
     end
 end
 
+function Panel.Prototype:GetChildrenSize()
+    local w, h = 0, 0
+    for k, v in pairs(self:GetChildren()) do
+        local x, y = v:ComputeProperty("X"), v:ComputeProperty("Y")
+        local cw, ch = v:CalculateSize(ctx)
+        w = math.max(x + cw, w)
+        h = math.max(y + ch, h)
+    end
+    return w, h
+end
+
+function Panel.Prototype:CalculateSize(ctx)
+    local w = self:ComputeProperty("Width")
+    local h = self:ComputeProperty("Height")
+
+    if not w or not h then
+        local cw, ch = self:GetChildrenSize() 
+        
+        cw = cw + (self:ComputeProperty("PaddingLeft") or 0) + (self:ComputeProperty("PaddingRight") or 0)
+        ch = ch + (self:ComputeProperty("PaddingTop") or 0) + (self:ComputeProperty("PaddingBottom") or 0)
+
+        if not w then
+            w = cw
+        end
+
+        if not h then
+            h = ch
+        end
+    end
+
+    self.Env["Width"] = w
+    self.Env["Height"] = h
+
+    local p = self:GetPanel()
+    if IsValid(p) then
+        local cw, ch = p:GetWide(), p:GetTall()
+        if cw ~= w or ch ~= h then
+            p:SetSize(w, h)
+        end
+    end
+
+    return w, h
+end
+
+
 function Panel.Prototype:PerformRefresh(ctx)
     local p = self:GetPanel()
     local type = self:GetType()
+    local parent = self:GetParent()
 
-    if self:GetDisplay() and not p then
-        local p = vgui.Create(self:GetClassName(), self:GetParent())
-        p.Paint = self.Paint
+    if self:GetDisplay() and not IsValid(p) then
+        
+        if parent and not parent:GetPanel() then
+            return
+        end
+
+        local p = vgui.Create(self:GetClassName(), parent and parent:GetPanel())
+        p.Paint = function (p, w, h) self:Paint(w, h) end
         p._ShadowPanel = self
 
         self:SetPanel(p)
@@ -272,10 +415,24 @@ function Panel.Prototype:PerformRefresh(ctx)
         end
         return
     end
+    
+    if parent then
+        self.Env["PW"] = parent:GetWidth()
+        self.Env["PH"] = parent:GetHeight()
+    else
+        self.Env["PW"] = ScrW()
+        self.Env["PH"] = ScrH()
+    end
+
+    self:CalculateSize(ctx)
 
     for _, prop in pairs(type:GetProperties()) do
         local k = prop.Name
         local opt = prop.Options
+
+        if opt.Skip then
+            continue
+        end
 
         if opt.Listen and not ctx.Force then
             local skip = true
@@ -295,8 +452,11 @@ function Panel.Prototype:PerformRefresh(ctx)
             continue
         end
 
+        self[k] = self:ComputeProperty(k)
+
         local v = self[k]
         local curr = get and get(p) or p[k]
+        self.Env[k] = v
 
         -- If it has changed, set the value
         if curr ~= v then
@@ -307,18 +467,18 @@ function Panel.Prototype:PerformRefresh(ctx)
             set(p, v)
         end
     end
-
     self.ChangedProperties = {}
+
+    for k, v in pairs(self:GetChildren()) do
+        v:PerformRefresh(ctx)
+    end
 end
 
 function Panel.Prototype:Paint(w, h)
-    local shadow = self._ShadowPanel
-    assert(shadow)
-
     local ct = CurTime()
-    local dt = ct - shadow._LastPaint
+    local dt = ct - self._LastPaint
 
-    for k, v in pairs(shadow.Transitions) do
+    for k, v in pairs(self.Transitions) do
         local complete = v.Tween:update(dt)
 
         local val
@@ -328,19 +488,19 @@ function Panel.Prototype:Paint(w, h)
             val = unpack(v.Value)
         end
 
-        shadow[k] = val
+        self[k] = val
         if v.Set then
-            v.Set(self, val)
+            v.Set(self:GetPanel(), val)
         end
-        shadow:Refresh()
+        self:Refresh()
 
         if complete then
             v.Promise:Complete()
-            shadow.Transitions[k] = nil
+            self.Transitions[k] = nil
         end
     end
 
-    shadow._LastPaint = ct
+    self._LastPaint = ct
 end
 
 function Panel.Prototype:OnPropertyChanged(name, value, old)
@@ -348,6 +508,7 @@ function Panel.Prototype:OnPropertyChanged(name, value, old)
     --if er:GetCancelled() then
     --    return false
     --end
+    local vgui = self:GetPanel()
 
     if name == "Parent" then
         if old then
@@ -360,7 +521,15 @@ function Panel.Prototype:OnPropertyChanged(name, value, old)
         end
 
         if value then
+            setmetatable(self.Env, { __index = value.Env })
             value:GetChildren()[#value:GetChildren() + 1] = self
+
+            if IsValid(vgui) then
+                vgui:SetParent(value:GetPanel())
+            end
+
+        else
+            setmetatable(self.Env, { __index = _G })
         end
         return
     end
@@ -377,6 +546,7 @@ function Panel.Prototype:Remove()
     self._Removed = true
 end
 Interface.Components["Panel"] = Panel
+Interface.Components["ShadowPanel"] = Panel
 
 
 function Interface.Register(classname, baseName, options)

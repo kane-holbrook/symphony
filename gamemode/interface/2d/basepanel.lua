@@ -42,7 +42,7 @@ do
     end
     Interface.GetFuncEnv = BasePanel.GetFuncEnv
 
-    function BasePanel:SetProperty(name, value)
+    function BasePanel:SetProperty(name, value, asFunction)
         assert(name, "Must provide a property name")
         
         self.Properties = self.Properties or {} 
@@ -59,9 +59,10 @@ do
         end
 
         local old = p.Value
-        if isfunction(value) then
+        if isfunction(value) and not asFunction then
             p.Func = value
         else
+            p.Func = nil
             p.Value = value
 
             local FuncEnv = self:GetFuncEnv()

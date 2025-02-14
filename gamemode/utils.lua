@@ -61,3 +61,17 @@ function nticks(n, func, ...)
         end
     end)
 end
+
+local function immuteError()
+    error("Table is immutable")
+end
+
+function immutable(t)
+    local mt = getmetatable(t) or {}
+    if mt.__newindex then
+        return false
+    end
+
+    mt.__newindex = immuteError
+    setmetatable(t, mt)
+end

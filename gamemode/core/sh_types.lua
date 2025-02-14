@@ -133,7 +133,7 @@ do
 		end
 
 		if options.Priority then
-			table.insert(self.Properties)
+			table.insert(self.Properties, prop)
 			table.SortByMember(self.Properties, "Priority") -- This breaks priorities
 		else
 			table.insert(self.Properties, prop)
@@ -144,19 +144,38 @@ do
 	end
 
 	function TYPE:GetProperties()
-		local props = tablex.ShallowCopy(self.Properties)
+		local props = {}
 		local super = self:GetSuper()
+
+		local idx = 0
 		if super then
-			table.Merge(props, self:GetSuper():GetProperties())
+			for k, v in pairs(super:GetProperties()) do
+				idx = idx + 1
+				props[idx] = v
+			end
 		end
+
+		idx = idx + 1
+		for k, v in pairs(self.Properties) do
+			idx = idx + 1
+			props[idx] = v
+		end
+
 		return props
 	end
 
 	function TYPE:GetPropertiesMap()
-		local props = tablex.ShallowCopy(self.PropertiesByName)
+		
+		local props = {}
 		local super = self:GetSuper()
 		if super then
-			table.Merge(props, self:GetSuper():GetPropertiesMap())
+			for k, v in pairs(super:GetPropertiesMap()) do
+				props[k] = v
+			end
+		end
+
+		for k, v in pairs(self.PropertiesByName) do
+			props[k] = v
 		end
 		return props
 	end
@@ -477,7 +496,7 @@ do
 	function OBJ:SetProperty(name, value)
 		local p = Type.GetType(self):GetPropertiesMap()[name]
 		if p and p.Type and not p.Options.NoValidate then
-			assert(value == nil or Type.GetType(value) == p.Type, "Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName())
+			assert(value == nil or Type.Is(value, p.Type), "Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName())
 		end
 
 		local old = self[name]
@@ -663,12 +682,9 @@ do
 
 	-- @test Type.Register  @REVIEW
 	function Type.Is(obj, super)
-		if not istable(obj) then
-			return false
-		end
-
-		if obj.Id then
-			obj = obj:GetType()
+		local type = Type.GetType(obj)
+		if type ~= Type.Type then
+			obj = type
 		end
 
 		if not obj.Ancestry then

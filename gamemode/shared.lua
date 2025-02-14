@@ -95,7 +95,7 @@ IncludeEx("types/framework/rpc.lua", Realm.Shared)
 IncludeEx("types/framework/collections.lua", Realm.Shared)
 IncludeEx("types/framework/datetime.lua", Realm.Shared)
 IncludeEx("core/sv_database.lua", Realm.Server)
-IncludeEx("interface/interface.lua", Realm.Shared)
+IncludeEx("interface/interface_v2.lua", Realm.Shared)
 IncludeEx("core/sh_tests.lua", Realm.Shared)
 
 --IncludeEx("views/setup/shared.lua", Realm.Shared)

@@ -24,16 +24,4 @@ do
     function Interface.GetPanelFactory()
         return PanelFactory
     end
-
-    
-    function vgui.Register(classname, panelTable, baseName)
-        local out = rawvgui.Register(classname, panelTable, baseName)
-        return out
-    end
-end
-
-
-for k, v in pairs(Interface.GetPanelFactory()) do
-    --local t = Type.Register(k, )
-    --print(k)
 end
