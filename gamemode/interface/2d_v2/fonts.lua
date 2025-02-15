@@ -14,9 +14,9 @@ function Interface.Font(font, sz, weight)
     local ratio = ScrH()/480
 
     local wp = vgui.GetWorldPanel()
-    font = font or wp:GetProperty("FontName") or "Oxanium"
-    sz = sz or wp:GetProperty("FontSize") or 9
-    weight = weight or wp:GetProperty("FontWeight") or 500
+    font = font or "Tahoma"
+    sz = sz or 4.5
+    weight = weight or 400
 
     local key = font .. ":" .. sz .. ":" .. weight
     if FONTS[key] then

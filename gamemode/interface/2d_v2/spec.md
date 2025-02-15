@@ -6,7 +6,7 @@
   - Via XML
 - Events
   - I can emit events to my parent ✓
-  - I can emit events to my children
+  - I can emit events to my children ✓
   - I can stop propagation of an event by cancelling it ✓
 - Properties
   - I can register new properties ✓
@@ -17,7 +17,7 @@
     - I can set a default transition/animation ✓
       - Via XML ✓
     - I can set a property to a piece of Lua code ✓
-      - Computed properties should have a function environment that
+      - Computed properties should have a function environment that ✓
         - Lets me access other properties on this object ✓
         - Lets me access properties set on parent objects (i.e. Hovered) ✓
         - Can access the parent width and height ✓
@@ -25,7 +25,7 @@
         - Allows access to _G ✓
       - I can define when this Lua code should run. ✓
 - Position/Size
-  - I can set an arbitrary X, Y, width and height.
+  - I can set an arbitrary X, Y, width and height. ✓
   - I can do this in:
     - Pixels
     - ScreenScale

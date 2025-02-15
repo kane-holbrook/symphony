@@ -7,6 +7,178 @@ Interface.Components = weaktable(false, true)
 
 local BasePanel = FindMetaTable("Panel")
 
+-- TODO
+-- Refs
+-- Extents
+-- Size To Children
+-- Layouts
+  -- Align
+  -- Direction
+  -- Gap
+  -- Margin
+  -- Padding
+-- Stencils
+-- Radiuses
+-- Borders/strokes
+-- Fills
+-- Shadows
+-- Registration
+-- Dynamic properties
+-- Templates
+-- Hover (& states)
+-- Drag & drop
+-- Keyboard shortcuts
+-- Components
+  -- Text
+  -- Image
+  -- Gradients
+  -- For loops
+  -- Timers
+  -- Hooks
+  -- Slots
+  -- ScrollPanel
+  -- HazardStrip
+  -- Window
+  -- Modal
+  -- MenuBar
+  -- Split views
+  -- Collapsible panels
+  -- Breadcrumbs
+  -- Spinners
+  -- PopOver
+  -- Tooltip
+  -- Details
+  -- ContextMenu
+  -- Button
+  -- Checkbox
+  -- List Groups
+  -- Data table
+  -- Toggle
+  -- Radio
+  -- Slider
+  -- Sounds
+  -- TextEntry
+  -- Picklist
+  -- Color picker
+  -- Tree
+  -- Tabs
+  -- Accordions
+  -- Keys
+  -- Sortable
+  -- Canvas
+  -- Grid
+  -- Item
+
+--[[
+    <Template Id="TemplateName"  />
+    </Template>
+]]
+
+
+local function DefaultExtent(el, value)
+    if string.EndsWith(value, "px") then
+        return tonumber(string.sub(value, 1, -3))
+    end
+
+    if string.EndsWith(value, "ss") then
+        return function ()
+            return ScreenScale(tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    if string.EndsWith(value, "ssh") then
+        return function ()
+            return ScreenScaleH(tonumber(string.sub(value, 1, -4)))
+        end
+    end
+
+    if string.EndsWith(value, "vw") then
+        return function ()
+            return ScrW() * (tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    if string.EndsWith(value, "vh") then
+        return function ()
+            return ScrH() * (tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    if string.EndsWith(value, "pw") then
+        return function ()
+            return Parent.Width * (tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    if string.EndsWith(value, "ph") then
+        return function ()
+            return Parent.Height * (tonumber(string.sub(value, 1, -3)))
+        end
+    end
+
+    -- Why isn't Interface.Font working
+
+    if string.EndsWith(value, "cw") then
+        return function ()
+            local font = el.Env.Font
+            surface.SetFont(font)
+            local x2, y2 = surface.GetTextSize("0")
+            return x2 * tonumber(string.sub(value, 1, -3))
+        end
+    end
+
+    if string.EndsWith(value, "ch") then
+        return function ()
+            local font = el.Env.Font
+            surface.SetFont(font)
+            local x2, y2 = surface.GetTextSize("0")
+            return y2 * tonumber(string.sub(value, 1, -3))
+        end
+    end
+
+    error("Invalid extent: " .. value)
+end
+
+function Interface.ExtentW(el, property, value)
+    local tn = tonumber(value)
+    if tn then
+        el:SetPropertyComputed(property, function ()
+            return ScreenScale(value)
+        end)
+        return true
+    end
+    
+    if string.EndsWith(value, "%") then
+        el:SetPropertyComputed(property, function ()
+            return Parent.Width * (tonumber(string.sub(value, 1, -2)) / 100)
+        end)
+        return true
+    end
+
+    el:SetPropertyComputed(property, DefaultExtent(el, value))
+    return true
+end
+
+function Interface.ExtentH(el, property, value)
+    local tn = tonumber(value)
+    if tn then
+        el:SetPropertyComputed(property, function ()
+            return ScreenScale(value)
+        end)
+        return true
+    end
+    
+    if string.EndsWith(value, "%") then
+        el:SetPropertyComputed(property, function ()
+            return Parent.Height * (tonumber(string.sub(value, 1, -2)) / 100)
+        end)
+        return true
+    end
+
+    el:SetPropertyComputed(property, DefaultExtent(el, value))
+    return true
+end
+
 local Panel = Type.Register("ShadowPanel", nil, { VGUI = "Panel" })
 Panel:CreateProperty("Parent", Panel)
 Panel:CreateProperty("Ref", Type.String)
@@ -16,12 +188,17 @@ Panel:CreateProperty("Panel", Type.Panel)
 Panel:CreateProperty("Propagate", Type.Boolean)
 Panel:CreateProperty("Display", Type.Boolean, { Priority = 9999 } )
 
+Panel:CreateProperty("FontName", Type.String)
+Panel:CreateProperty("FontWeight", Type.Number)
+Panel:CreateProperty("FontSize", Type.Number)
+Panel:CreateProperty("Font", nil, { Listen = { "FontName", "FontWeight", "FontSize", "ResolutionChange" } })
+
 -- BasePanel properties
 do
-    Panel:CreateProperty("Width", Type.Number, { Set = BasePanel.SetWide, Get = BasePanel.GetWide, Emit = "Resize", Listen = { "Resize", "Parent:Resize" } })
-    Panel:CreateProperty("Height", Type.Number, { Set = BasePanel.SetTall, Get = BasePanel.GetTall, Emit = "Resize", Listen = { "Resize", "Parent:Resize" } })
-    Panel:CreateProperty("X", Type.Number, { Set = BasePanel.SetX, Get = BasePanel.GetX, Listen = { "Resize", "Parent:Resize" } })
-    Panel:CreateProperty("Y", Type.Number, { Set = BasePanel.SetY, Get = BasePanel.GetY, Listen = { "Resize", "Parent:Resize" } })
+    Panel:CreateProperty("Width", Type.Number, { Set = BasePanel.SetWide, Get = BasePanel.GetWide, Parse = Interface.ExtentW, Emit = "Resize", Listen = { "Resize", "Parent:Resize" } })
+    Panel:CreateProperty("Height", Type.Number, { Set = BasePanel.SetTall, Get = BasePanel.GetTall, Parse = Interface.ExtentH, Emit = "Resize", Listen = { "Resize", "Parent:Resize" } })
+    Panel:CreateProperty("X", Type.Number, { Set = BasePanel.SetX, Get = BasePanel.GetX, Parse = Interface.ExtentW, Listen = { "Resize", "Parent:Resize" } })
+    Panel:CreateProperty("Y", Type.Number, { Set = BasePanel.SetY, Get = BasePanel.GetY, Parse = Interface.ExtentH, Listen = { "Resize", "Parent:Resize" } })
     Panel:CreateProperty("Fill", Type.Color)
 end
 
@@ -65,6 +242,10 @@ function Panel:CreateFromNode(parent, node, ctx)
             local f = CompileString("return " .. v, "Property[" .. k .. "]")
             el:SetPropertyComputed(k, f)
             el:ComputeProperty(k)
+        elseif string.StartsWith(k, "Init:") then
+            k = string.sub(k, 6)
+            local f = CompileString("return " .. v, "Init:Property[" .. k .. "]")
+            el:SetProperty(k, f()(el))
         elseif string.StartsWith(k, "Transition:") then
             k = string.sub(k, 11)
             local easing, duration = unpack(string.Split(v, " "))
@@ -74,25 +255,37 @@ function Panel:CreateFromNode(parent, node, ctx)
             end
 
             el:SetPropertyTransition(k, tonumber(duration), easing)
-        elseif string.StartsWith(k, "On:") then
-            local name = string.sub(k, 4)
-            local func = CompileString("return " .. v, k)
-            el.Events:Hook(name, func())
+        elseif prop.Options.Parse then
+            v = prop.Options.Parse(el, k, v)
         else
-            assert(prop, "Property " .. k .. " does not exist on " .. self:GetName())
-
-            if prop.Options.Parse then
-                v = prop.Options.Parse(v)
-                if isfunction(v) then
-                    el:SetPropertyComputed(k, v)
-                    return
-                end
-            elseif prop.Type then
+            if prop.Type then
                 v = prop.Type:Parse(v)
             end
 
             el:SetProperty(k, v)
         end        
+    end
+
+    for k, v in pairs(node.Attributes) do
+        if skip[k] then
+            continue
+        end
+
+        if string.StartsWith(k, ":") then
+            ErrorNoHalt("Only properties can have computed values")
+        elseif string.StartsWith(k, "Init:") then
+            k = string.sub(k, 6)
+            local f = CompileString("return " .. v, "Init:Property[" .. k .. "]")
+            el[k] = f()(el)
+        elseif string.StartsWith(k, "Transition:") then
+            error("Only properties can have transitions")
+        elseif string.StartsWith(k, "On:") then
+            local name = string.sub(k, 4)
+            local func = CompileString("return " .. v, k)
+            el.Events:Hook(name, func())
+        else
+            el[k] = v
+        end
     end
 
     for k, v in pairs(node.Children) do
@@ -110,22 +303,34 @@ function Panel:IsVirtual()
     return self:GetOptions().VGUI == false
 end
 
-local DefaultParent = {
-    Width = ScrW(),
-    Height = ScrH()
+local DefaultEnv = {
+    FontName = "Tahoma",
+    FontSize = 4.5,
+    FontWeight = 400,
+    FontColor = color_white,
+    Parent = {
+        Width = ScrW(),
+        Height = ScrH()
+    }
 }
+DefaultEnv.Font = Interface.Font(DefaultEnv.FontName, DefaultEnv.FontSize, DefaultEnv.FontWeight)
+setmetatable(DefaultEnv, { __index = _G })
+
+function Interface.GetDefaultEnv()
+    return DefaultEnv
+end
 
 hook.Add("OnScreenSizeChanged", "Interface.OnScreenSizeChanged", function()
-    DefaultParent.Width = ScrW()
-    DefaultParent.Height = ScrH()
+    DefaultEnv.Parent.Width = ScrW()
+    DefaultEnv.Parent.Height = ScrH()
 end)
 
 function Panel.Prototype:Initialize()
     
     self.Env = setmetatable({
         self = self,
-        Parent = DefaultParent
-    }, { __index = _G })
+        Parent = Interface.GetDefaultEnv()
+    }, { __index = Interface.GetDefaultEnv() })
 
     self.Events = new(Type.EventBus)
     self.Events:Hook("*", function (...)
@@ -144,16 +349,12 @@ function Panel.Prototype:Initialize()
     self:SetFill(Color(0, 0, 0, 64))
     self:SetDisplay(true)
     self:SetPropagate(true)
+
+    self:SetPropertyComputed("Font", function ()
+        return Interface.Font(self.FontName, self.FontSize, self.FontWeight)
+    end, true)
 end
 
-function Panel.Prototype:ReceiveEvent(name, ...)
-    local args = {...}
-
-    if name == "ChildAdded" then
-        local el = args[1]
-        print(el:GetRef())
-    end
-end
 
 
 function Panel.Prototype:IsValid()
@@ -196,6 +397,24 @@ function Panel.Prototype:Emit(name, ...)
     end
 end
 
+function Panel.Prototype:ReceiveEvent(name, ...)
+    local args = {...}
+
+    if name == "ChildAdded" or name == "Child:Change:Ref" then
+        local el = args[1]
+        local el_ref = args[2]
+        local old = args[3]
+        
+        local ref = self:GetRef()
+        
+        if el_ref and (ref or not self:GetParent()) then
+            self[el_ref] = el
+            el.RefTarget = self
+            Event:SetCancelled(true)
+        end
+    end
+end
+
 local function SetProperty(el, name, value)
     local old = el[name]
     el[name] = value
@@ -230,7 +449,7 @@ function Panel.Prototype:GetPropertyTransition(name)
     return self.DefaultTransitions[name]
 end
 
-function Panel.Prototype:SetPropertyComputed(name, func)
+function Panel.Prototype:SetPropertyComputed(name, func, dontRun)
     assert(isstring(name), "Calculated property name must be a string")
     assert(func == nil or isfunction(func), "Calculated property must be a function")
     if func then 
@@ -238,7 +457,9 @@ function Panel.Prototype:SetPropertyComputed(name, func)
     end
 
     self.ComputedProperties[name] = func
-    self:ComputeProperty(name)
+    if not dontRun then
+        self:ComputeProperty(name)
+    end
 
     local prop = self:GetType():GetPropertiesMap()[name]
     local opt = prop.Options
@@ -370,6 +591,10 @@ function Panel.Prototype:OnPropertyChanged(name, value, old)
             el.Paint = function (p, w, h)
                 self:Paint(w, h)
             end
+            el.PerformLayout = function (w, h)
+                self:EmitNoPropagate("PerformLayout", w, h) 
+                return w, h
+            end
             el.Interface = self
             self:SetPanel(el)
 
@@ -388,12 +613,9 @@ function Panel.Prototype:OnPropertyChanged(name, value, old)
                 el:Remove()
             end
             self:SetPanel(nil)
+            self:SetParent(nil)
         end
-        return
-
-    end
-
-    if name == "Parent" then
+    elseif name == "Parent" then
         if old then
             for k, v in pairs(old:GetChildren()) do
                 if v == self then
@@ -418,9 +640,8 @@ function Panel.Prototype:OnPropertyChanged(name, value, old)
             if IsValid(el) then
                 el:SetParent(nil)
             end
-            self.Env.Parent = DefaultParent
 
-            setmetatable(self.Env, { __index = _G })
+            setmetatable(self.Env, { __index = Interface.GetDefaultEnv() })
         end
         return
     end
@@ -449,7 +670,13 @@ function Panel.Prototype:Remove()
     if IsValid(self:GetPanel()) then
         self:GetPanel():Remove()
     end
+    
+    if self.RefTarget then
+        self.RefTarget[self:GetRef()] = nil
+    end
+
     self._Removed = true
+    self:Emit("Removed")
 end
 Interface.Components["Panel"] = Panel
 Interface.Components["ShadowPanel"] = Panel
