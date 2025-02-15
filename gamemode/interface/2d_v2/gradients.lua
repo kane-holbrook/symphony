@@ -152,3 +152,29 @@ function DrawCircularGradient(x, y, w, h, col1, col2, stop)
 
     render.SetScissorRect(0, 0, 0, 0, false)
 end
+
+local PANEL = Interface.Register("Gradient", "Rect")
+PANEL:CreateProperty("Start", Type.Color)
+PANEL:CreateProperty("Stop", Type.Color)
+PANEL:CreateProperty("Mid", Type.Number)
+PANEL:CreateProperty("Mode", Type.String)
+
+function PANEL.Prototype:Initialize()
+    base(self, "Initialize")
+    self:SetStart(color_white)
+    self:SetStop(color_black)
+    self:SetMid(0.5)
+    self:SetMode("Linear")
+end
+
+function PANEL.Prototype:Paint(w, h)
+    base(self, "Paint", w, h)
+    self:StartStencil(w, h)
+    local x, y = self:GetPanel():LocalToScreen(0, 0)
+    if self:GetMode() == "Linear" then
+        DrawLinearGradient(x, y, w, h, self:GetStart(), self:GetStop(), self:GetMid())
+    else
+        DrawCircularGradient(x, y, w, h, self:GetStart(), self:GetStop(), self:GetMid())
+    end
+    self:FinishStencil()
+end

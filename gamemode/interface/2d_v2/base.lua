@@ -179,26 +179,60 @@ function Interface.ExtentH(el, property, value)
     return true
 end
 
-local Panel = Type.Register("ShadowPanel", nil, { VGUI = "Panel" })
+local Panel = Type.Register("Rect", nil, { VGUI = "Panel" })
 Panel:CreateProperty("Parent", Panel)
 Panel:CreateProperty("Ref", Type.String)
 Panel:CreateProperty("FullyQualifiedRef", Type.String) 
 Panel:CreateProperty("Children", Type.Table)
 Panel:CreateProperty("Panel", Type.Panel)
 Panel:CreateProperty("Propagate", Type.Boolean)
+Panel:CreateProperty("EventsEnabled", Type.Boolean)
+
 Panel:CreateProperty("Display", Type.Boolean, { Priority = 9999 } )
+Panel:CreateProperty("Scale", Type.Vector)
+Panel:CreateProperty("Angle", Type.Angle)
 
 Panel:CreateProperty("FontName", Type.String)
 Panel:CreateProperty("FontWeight", Type.Number)
 Panel:CreateProperty("FontSize", Type.Number)
-Panel:CreateProperty("Font", nil, { Listen = { "FontName", "FontWeight", "FontSize", "ResolutionChange" } })
+Panel:CreateProperty("Font", nil, { Listen = { "Change:FontName", "Change:FontWeight", "Change:FontSize", "ResolutionChange" } })
+
+Panel:CreateProperty("Align", Type.Number)
+Panel:CreateProperty("Flow", Type.String)
+Panel:CreateProperty("Gap", Type.Number, { Parse = Interface.ExtentW })
+
+Panel:CreateProperty("PaddingLeft", Type.Number, { Parse = Interface.ExtentW })
+Panel:CreateProperty("PaddingTop", Type.Number, { Parse = Interface.ExtentH })
+Panel:CreateProperty("PaddingRight", Type.Number, { Parse = Interface.ExtentW })
+Panel:CreateProperty("PaddingBottom", Type.Number, { Parse = Interface.ExtentH })
+
+Panel:CreateProperty("MarginLeft", Type.Number, { Parse = Interface.ExtentW })
+Panel:CreateProperty("MarginTop", Type.Number, { Parse = Interface.ExtentH })
+Panel:CreateProperty("MarginRight", Type.Number, { Parse = Interface.ExtentW })
+Panel:CreateProperty("MarginBottom", Type.Number, { Parse = Interface.ExtentH })
+
+Panel:CreateProperty("Gap", Type.Number)
+Panel:CreateProperty("Absolute", Type.Boolean)
+Panel:CreateProperty("Grow", Type.Boolean)
+
+function Panel.Metamethods:__tostring()
+    return self:GetType():GetName() .. "[" .. (self:GetRef() or self:GetId()) .. "][" .. tostring(self:GetX()) .. "," .. tostring(self:GetY()) .. "," .. tostring(self:GetWidth()) .. "," .. tostring(self:GetHeight()) .. "]"
+end
 
 -- BasePanel properties
 do
-    Panel:CreateProperty("Width", Type.Number, { Set = BasePanel.SetWide, Get = BasePanel.GetWide, Parse = Interface.ExtentW, Emit = "Resize", Listen = { "Resize", "Parent:Resize" } })
-    Panel:CreateProperty("Height", Type.Number, { Set = BasePanel.SetTall, Get = BasePanel.GetTall, Parse = Interface.ExtentH, Emit = "Resize", Listen = { "Resize", "Parent:Resize" } })
-    Panel:CreateProperty("X", Type.Number, { Set = BasePanel.SetX, Get = BasePanel.GetX, Parse = Interface.ExtentW, Listen = { "Resize", "Parent:Resize" } })
-    Panel:CreateProperty("Y", Type.Number, { Set = BasePanel.SetY, Get = BasePanel.GetY, Parse = Interface.ExtentH, Listen = { "Resize", "Parent:Resize" } })
+    Panel:CreateProperty("WidthAuto", Type.Boolean)
+    Panel:CreateProperty("HeightAuto", Type.Boolean)
+    Panel:CreateProperty("Width", Type.Number, { Set = BasePanel.SetWide, Get = BasePanel.GetWidth, Parse = function (el, k, v) 
+        el:SetWidthAuto(false) 
+        return Interface.ExtentW(el, k, v) 
+    end, Emit = "Resize", Listen = { } })
+    Panel:CreateProperty("Height", Type.Number, { Set = BasePanel.SetTall, Get = BasePanel.GetHeight, Parse = function (el, k, v) 
+        el:SetHeightAuto(false) 
+        return Interface.ExtentH(el, k, v) 
+    end, Emit = "Resize", Listen = { } })
+    Panel:CreateProperty("X", Type.Number, { Set = BasePanel.SetX, Get = BasePanel.GetX, Parse = Interface.ExtentW, Emit = "Reposition" })
+    Panel:CreateProperty("Y", Type.Number, { Set = BasePanel.SetY, Get = BasePanel.GetY, Parse = Interface.ExtentH, Emit = "Reposition" })
     Panel:CreateProperty("Fill", Type.Color)
 end
 
@@ -238,7 +272,7 @@ function Panel:CreateFromNode(parent, node, ctx)
 
         -- : is computed
         if string.StartsWith(k, ":") then
-            k = string.sub(k, 2)        
+            k = string.sub(k, 2)
             local f = CompileString("return " .. v, "Property[" .. k .. "]")
             el:SetPropertyComputed(k, f)
             el:ComputeProperty(k)
@@ -295,6 +329,27 @@ function Panel:CreateFromNode(parent, node, ctx)
     return el
 end
 
+function Panel.Prototype:GetChildrenSize()
+    local tw, th = 0, 0
+    local minx, miny = math.huge, math.huge
+    for k, v in pairs(self:GetChildren()) do
+        if not v:GetDisplay() then continue end
+        local x, y = v:GetX(), v:GetY()
+        minx = math.min(minx, x)
+        miny = math.min(miny, y)
+    end
+
+    for k, v in pairs(self:GetChildren()) do
+        if not v:GetDisplay() then continue end
+        local x, y = v:GetX(), v:GetY()
+        local w, h = v:GetWidth() or 0, v:GetHeight() or 0
+        local ml, mt, mr, mb = v:GetMargin()
+        tw = math.max(tw, x + w)
+        th = math.max(th, y + h)
+    end
+    return tw, th
+end
+
 function Panel:ParseNodeChild(el, child, ctx)
     return Interface.CreateFromNode(el, child)
 end
@@ -302,6 +357,8 @@ end
 function Panel:IsVirtual()
     return self:GetOptions().VGUI == false
 end
+
+
 
 local DefaultEnv = {
     FontName = "Tahoma",
@@ -342,19 +399,281 @@ function Panel.Prototype:Initialize()
     self._LastPaint = CurTime() 
 
     self:SetChildren({})
+    self:SetProperty("Width", 0)
+    self:SetProperty("Height", 0)
     self:SetX(0)
     self:SetY(0)
-    self:SetWidth(128)
-    self:SetHeight(128)
-    self:SetFill(Color(0, 0, 0, 64))
+    self:SetFill(color_transparent)
     self:SetDisplay(true)
     self:SetPropagate(true)
-
+    self:SetWidthAuto(true)
+    self:SetHeightAuto(true)
+    self:SetScale(Vector(1, 1, 1))
+    self:SetAngle(Angle(0, 0, 0))
     self:SetPropertyComputed("Font", function ()
-        return Interface.Font(self.FontName, self.FontSize, self.FontWeight)
+        return Interface.Font(self.Env.FontName, self.Env.FontSize, self.Env.FontWeight)
     end, true)
+    self:SetAlign(7)
+    self:SetFlow("X")
+    self:SetGap(0)
+    self:SetPaddingLeft(0)
+    self:SetPaddingTop(0)
+    self:SetPaddingRight(0)
+    self:SetPaddingBottom(0)
+    self:SetMarginLeft(0)
+    self:SetMarginTop(0)
+    self:SetMarginRight(0)
+    self:SetMarginBottom(0)
+    self:SetAbsolute(false)
+    self:SetGrow(false)
+    self:SetEventsEnabled(true)
 end
 
+function Panel.Prototype:GetPadding()
+    return self:GetPaddingLeft(), self:GetPaddingTop(), self:GetPaddingRight(), self:GetPaddingBottom()
+end
+
+function Panel.Prototype:GetMargin()
+    return self:GetMarginLeft(), self:GetMarginTop(), self:GetMarginRight(), self:GetMarginBottom()
+end
+
+function Panel.Prototype:Layout()
+
+    if self.IsLayingOut then 
+        return false
+    end
+
+    local align = self:GetAlign()
+    if not align then
+        return
+    end
+
+    local w, h = self:GetWidth(), self:GetHeight()
+
+    local flowDirection = self:GetFlow()
+    local gap = self:GetGap()
+    local pl, pt, pr, pb = self:GetPadding()
+
+
+    local children = self:GetChildren()
+    local tw, th = 0, 0
+    local growElement
+    for k, child in pairs(children) do
+        if child:GetAbsolute() or not child:GetDisplay() then
+            continue
+        end
+
+        local cl, ct, cr, cb = child:GetMargin()
+
+        if child:GetGrow() then
+            assert(not growElement, "Can only have one element set to Grow within a child.")
+
+            growElement = child
+            tw = tw + cr + cl + gap            
+            th = th + ct + cb + gap
+        else
+            tw = tw + child:GetWidth() + cr + cl + gap            
+            th = th + child:GetHeight() + ct + cb + gap
+        end
+    end
+    tw = tw - gap + pl + pr
+    th = th - gap + pt + pb
+
+    if growElement then
+        local cl, ct, cr, cb = growElement:GetMargin()
+
+        self.IsLayingOut = true
+        
+            if flowDirection == "X" then
+                growElement:SetWidth(w - tw)
+                growElement:SetHeight(h - pt - pb)
+            else
+                growElement:SetWidth(w - pl - pr)
+                growElement:SetHeight(h - th)
+            end
+            
+        self.IsLayingOut = false
+
+        tw = w
+        th = h
+    end
+
+    local ChildPos = {}
+
+    -- Horizontal align
+    if isany(align, 1, 4, 7) then
+        local wd = pl
+        local x = wd
+        local y = 0
+        local mh = 0
+
+        for k=1, #children do
+            local child = children[k]
+
+            if not IsValid(child) then
+                continue
+            end
+            
+            if child:GetAbsolute() or not child:GetDisplay() then
+                continue
+            end
+
+            local cl, ct, cr, cb = child:GetMargin()
+            local cw, ch = child:GetWidth(), child:GetHeight()
+            
+            if flowDirection == "X" then
+                ChildPos[child] = { x + cl, y }
+                x = x + cw + cr + cl + gap
+            else
+                ChildPos[child] = { cl + pl, 0 }
+            end
+        end
+    elseif isany(align, 8, 5, 2) then
+        local wd = self:GetWidth()/2 - tw/2
+        local x = wd + pl
+        for k=1, #children do
+            local child = children[k]
+
+            if not IsValid(child) then
+                continue
+            end
+            
+            if child:GetAbsolute() or not child:GetDisplay() then
+                continue
+            end
+
+            local cl, ct, cr, cb = child:GetMargin()
+                            
+            if flowDirection == "X" then
+                ChildPos[child] = { cl + x, 0 }
+                x = x + cl + child:GetWidth() + cr + gap
+            else
+                ChildPos[child] = { self:GetWidth()/2 - child:GetWidth()/2, 0 }
+            end
+        end
+    else
+        local wd = self:GetWidth()
+        local x = wd - pr
+        for k=1, #children do
+            local child = children[k]
+
+            if not IsValid(child) then
+                continue
+            end
+            
+            if child:GetAbsolute() or not child:GetDisplay() then
+                continue
+            end
+
+            local cl, ct, cr, cb = child:GetMargin()
+
+            if flowDirection == "X" then
+                x = x - child:GetWidth() - cr
+                ChildPos[child] = { x, 0 }
+                x = x - cl - gap
+            else
+                ChildPos[child] = { wd - child:GetWidth() - cr - pr }
+            end
+        end
+    end
+
+    -- Vertical align
+    if isany(align, 7, 8, 9) then
+        local t = pt
+        local y = t
+
+
+        for k=1, #children do
+            local child = children[k]
+
+            if not IsValid(child) then
+                continue
+            end
+            
+            if child:GetAbsolute() or not child:GetDisplay() then
+                continue
+            end
+            
+            local cl, ct, cr, cb = child:GetMargin()
+            local cp = ChildPos[child]
+                                            
+            if flowDirection == "Y" then
+                
+                ChildPos[child][2] = y + ct
+                y = y + ct + child:GetHeight() + cb + gap
+            else
+                ChildPos[child][2] = y + ct
+                y = t
+            end
+        end
+    elseif isany(align, 4, 5, 6) then
+        local t = self:GetHeight()/2 - th/2
+        local y = t + pt
+        for k=1, #children do
+            local child = children[k]
+
+            if not IsValid(child) then
+                continue
+            end
+            
+            if child:GetAbsolute() or not child:GetDisplay() then
+                continue
+            end
+
+            local cl, ct, cr, cb = child:GetMargin()
+            local cp = ChildPos[child]
+
+            if flowDirection == "Y" then               
+                ChildPos[child][2] = y + ct
+                y = y + child:GetHeight() + cb + gap
+            else
+                y = h/2 - child:GetHeight()/2
+                ChildPos[child][2] = y
+            end
+        end
+    else
+        local t = self:GetHeight() - pb
+        local y = t
+        for k=1, #children do
+            local child = children[k]
+
+            if not IsValid(child) then
+                continue
+            end
+            
+            if child:GetAbsolute() or not child:GetDisplay() then
+                continue
+            end
+
+            local cl, ct, cr, cb = child:GetMargin()
+            local cp = ChildPos[child]
+
+            if flowDirection == "Y" then
+                y = y - child:GetHeight() - cb
+                ChildPos[child][2] = y
+                y = y - ct - gap
+            else
+                y = t - child:GetHeight() - cb
+                ChildPos[child][2] = y
+            end
+
+        end
+    end        
+
+    self.IsLayingOut = true
+        for k, v in pairs(ChildPos) do
+            local x, y = unpack(v)
+            k:SetX(x)
+            k:SetY(y)
+        end
+    self.IsLayingOut = false
+end
+
+function Panel.Prototype:StartStencil(w, h)
+end
+
+function Panel.Prototype:FinishStencil()
+end
 
 
 function Panel.Prototype:IsValid()
@@ -366,12 +685,22 @@ function Panel.Prototype:GetEnv()
 end
 
 function Panel.Prototype:EmitNoPropagate(name, ...)
+    assert(name, "Event name must be provided")
+
+    if not self:GetEventsEnabled() then
+        return Type.New(EventResult)
+    end
+
     local er = self.Events:Run(name, ...)
     return er
 end
 
 function Panel.Prototype:Emit(name, ...)
     assert(name, "Event name must be provided")
+
+    if not self:GetEventsEnabled() then
+        return Type.New(EventResult)
+    end
 
     local er = self:EmitNoPropagate(name, ...)
     if er:GetCancelled() or not self:GetPropagate() then
@@ -397,9 +726,42 @@ function Panel.Prototype:Emit(name, ...)
     end
 end
 
+function Panel.Prototype:SetWidth(value)
+    self:SetWidthAuto(false)
+    self:SetProperty("Width", value)
+end
+
+function Panel.Prototype:SetHeight(value)
+    self:SetHeightAuto(false)
+    self:SetProperty("Height", value)
+end
+
+function Panel.Prototype:SizeToChildren()
+    local w, h = self:GetChildrenSize()
+    if self:GetWidthAuto() then
+        self:SetProperty("Width", w)
+    end
+    
+    if self:GetHeightAuto() then
+        self:SetProperty("Height", h)
+    end
+end
+
 function Panel.Prototype:ReceiveEvent(name, ...)
     local args = {...}
 
+    -- SizeToChildren
+    if (name == "ChildAdded" or name == "ChildRemoved" or name == "Child:Resize" or name == "Child:Reposition") and not self.IsLayingOut then
+        
+        if self:GetAlign() then
+            self:Layout()
+        end
+
+        if (self:GetWidthAuto() or self:GetHeightAuto()) then
+            self:SizeToChildren()
+        end
+    end
+        
     if name == "ChildAdded" or name == "Child:Change:Ref" then
         local el = args[1]
         local el_ref = args[2]
@@ -411,7 +773,6 @@ function Panel.Prototype:ReceiveEvent(name, ...)
             self[el_ref] = el
             el.RefTarget = self
             Event:SetCancelled(true)
-            print("Cancel")
         end
     end
 end
@@ -439,6 +800,10 @@ function Panel.Prototype:SetProperty(name, value, immediate)
     SetProperty(self, name, value)
 end
 
+function Panel.Prototype:GetProperty(name)
+    return self[name]
+end
+
 function Panel.Prototype:SetPropertyTransition(name, duration, easing)
     assert(isstring(name))
     assert(isnumber(duration))
@@ -448,6 +813,14 @@ end
 
 function Panel.Prototype:GetPropertyTransition(name)
     return self.DefaultTransitions[name]
+end
+
+function Panel.Prototype:IsWidthAuto()
+    return self:GetWidthAuto() and not self.ComputedProperties["Width"]
+end
+
+function Panel.Prototype:IsHeightAuto()
+    return self:GetHeightAuto() and not self.ComputedProperties["Height"]
 end
 
 function Panel.Prototype:SetPropertyComputed(name, func, dontRun)
@@ -558,12 +931,20 @@ function Panel.Prototype:Paint(w, h)
         end
     end
 
+    local m = Matrix()
+    m:Rotate(self:GetAngle())
+    m:Scale(self:GetScale())
+    cam.PushModelMatrix(m, true)
     surface.SetDrawColor(self:GetFill())
     surface.DrawRect(0, 0, w, h)
 
-    self:EmitNoPropagate("Paint")
+    --self:EmitNoPropagate("Paint")
 
     self._LastPaint = ct
+end
+
+function Panel.Prototype:PaintOver(w, h)
+    cam.PopModelMatrix()
 end
 
 function Panel.Prototype:OnPropertyChanged(name, value, old)
@@ -679,8 +1060,7 @@ function Panel.Prototype:Remove()
     self._Removed = true
     self:Emit("Removed")
 end
-Interface.Components["Panel"] = Panel
-Interface.Components["ShadowPanel"] = Panel
+Interface.Components["Rect"] = Panel
 
 
 function Interface.Register(classname, baseName, options)
@@ -693,7 +1073,7 @@ function Interface.Register(classname, baseName, options)
 end
 
 
-local VIRTUAL = Interface.Register("Virtual", "Panel", { VGUI = false })
+local VIRTUAL = Interface.Register("Virtual", "Rect", { VGUI = false })
 
 local LISTEN = Interface.Register("Listen", "Virtual", { VGUI = false })
 LISTEN:CreateProperty("Event", Type.String)
@@ -701,8 +1081,8 @@ LISTEN:CreateProperty("Properties", Type.String)
 
 function LISTEN.Prototype:Initialize()
     base(self, "Initialize")
-    self.Events = {}
-    self.Properties = {}
+    self.Listen = {}
+    self.Props = {}
 end
 
 function LISTEN.Prototype:OnPropertyChanged(name, value, old)
@@ -710,11 +1090,11 @@ function LISTEN.Prototype:OnPropertyChanged(name, value, old)
         local events = string.Split(value, ",")
         tablex.Trim(events)
         events = table.Flip(events)
-        self.Events = events
+        self.Listen = events
 
         self:GetParent().Events:Hook("*", function (name, ...)
-            if self.Events[name] then
-                for k, v in pairs(self.Properties) do
+            if self.Listen[name] then
+                for k, v in pairs(self.Props) do
                     self:GetParent():ComputeProperty(k)
                 end
             end
@@ -723,7 +1103,6 @@ function LISTEN.Prototype:OnPropertyChanged(name, value, old)
         local props = string.Split(value, ",")
         tablex.Trim(props)
         props = table.Flip(props)
-        PrintTable(props)
-        self.Properties = props
+        self.Props = props
     end
 end

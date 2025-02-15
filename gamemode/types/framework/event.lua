@@ -61,7 +61,6 @@ function EVENTBUS.Prototype:Run(name, ...)
     if name ~= "*" then
         local er = self:Run("*", name, ...)
         if er:GetCancelled() then
-            print("Cancelled")
             return er
         end
     end
