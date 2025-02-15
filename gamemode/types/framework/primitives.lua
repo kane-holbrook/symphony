@@ -172,7 +172,12 @@ function COLOR:Parse(value)
         return color_transparent
     end
 
-    local h = colorex.FromHex(value)
+    local h = colorex.GetByName(value)
+    if h then
+        return h
+    end
+    
+    h = colorex.FromHex(value)
     if h then
         return h
     end
@@ -183,10 +188,10 @@ function COLOR:Parse(value)
     b = tonumber(b)
     a = tonumber(a) or 255
 
-    assert(r)
-    assert(g)
-    assert(b)
-    assert(a)
+    assert(r, "Failed to parse color r value from " .. value)
+    assert(g, "Failed to parse color g value from " .. value)
+    assert(b, "Failed to parse color b value from " .. value)
+    assert(a, "Failed to parse color a value from " .. value)
 
     return Color(r, g, b, a)
 end
