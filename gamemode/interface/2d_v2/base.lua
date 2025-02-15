@@ -411,6 +411,7 @@ function Panel.Prototype:ReceiveEvent(name, ...)
             self[el_ref] = el
             el.RefTarget = self
             Event:SetCancelled(true)
+            print("Cancel")
         end
     end
 end

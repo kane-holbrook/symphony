@@ -59,7 +59,11 @@ function EVENTBUS.Prototype:Run(name, ...)
     local h = self[name]
     
     if name ~= "*" then
-        self:Run("*", name, ...)
+        local er = self:Run("*", name, ...)
+        if er:GetCancelled() then
+            print("Cancelled")
+            return er
+        end
     end
 
     local er = Type.New(EVENTRESULT)
@@ -79,6 +83,9 @@ function EVENTBUS.Prototype:Run(name, ...)
     Event = er
     for k, v in pairs(mt.Cache) do
         v.Func(...)
+        if er:GetCancelled() then
+            break
+        end
     end
 
     Event = nil
@@ -142,6 +149,5 @@ hook.Add("Test.Register", "EventBus", function()
 
         er = ev:Run("Event", 32)
         Test.Equals(er:GetCancelled(), true)
-        Test.Equals(r, true)
     end)
 end)
