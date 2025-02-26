@@ -62,6 +62,31 @@ function nticks(n, func, ...)
     end)
 end
 
+-- Creates a timer if it doesn't exist
+local debouncers = {}
+function debounce(name, time, func, ...)
+    time = time or 0
+    debouncers[name] = { func, { ... } }
+
+    if not timer.Exists(name) then
+        local args = {...}
+        timer.Create(name, time, 1, function ()
+            local func = debouncers[name][1]
+            local args = debouncers[name][2]
+            func(unpack(args))
+            debouncers[name] = nil
+        end)
+    end
+end
+
+function cancelDebounce(name)
+    timer.Remove(name)
+end
+
+function adjustDebounce(name, time)
+    timer.Adjust(name, time)
+end
+
 local function immuteError()
     error("Table is immutable")
 end

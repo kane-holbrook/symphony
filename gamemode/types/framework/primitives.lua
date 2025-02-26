@@ -237,6 +237,25 @@ function TABLE:Parse(value)
     return util.JSONToTable(value)
 end
 
+
+
+local MATERIAL = Type.Register("Material", PRIMITIVE, { Code = TYPE_MATERIAL })
+function MATERIAL:Parse(value)
+    return Material(value, "mips smooth noclamp")
+end
+
+function MATERIAL:DatabaseEncode(value)
+    return string.format("%q", value:GetName())
+end
+
+function MATERIAL:DatabaseDecode(value)
+    return Material:Parse(value)
+end
+PopulateMetaTable(FindMetaTable("IMaterial"), MATERIAL)
+
+
+
+
 function Type.IsPrimitive(obj, allowNil)
     if (not allowNil and not obj) or not obj.GetType then
         return false

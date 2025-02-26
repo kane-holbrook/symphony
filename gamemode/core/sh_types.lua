@@ -66,8 +66,7 @@ do
 		})
 
 		setmetatable(t, mt)
-		self.InstanceCount = self.InstanceCount + 1
-		self.Instances[self.InstanceCount] = t
+		table.insert(self.Instances, t)
 
 		Type.Instances[t:GetId()] = t
 
@@ -114,6 +113,17 @@ do
 	-- @test Type.Register
 	function TYPE:CreateProperty(name, type, options)
 		options = options or {}
+
+		if self.PropertiesByName[name] then
+			local prop = self.PropertiesByName[name]
+			prop.Type = prop
+			prop.Options = options
+			if options.Priority then
+				table.SortByMember(self.Properties, "Priority")
+			end
+			return prop
+		end
+
 		local prop = {
 			Name = name,
 			Type = type,
@@ -624,8 +634,7 @@ do
 		t.Prototype = setmetatable({}, { __index = super.Prototype, Type = t, Super = super, Base = super.Prototype })
 		t.Metamethods = table.Copy(super.Metamethods)
 		t.Derivatives = {}
-		t.Instances = {}
-		t.InstanceCount = 0
+		t.Instances = weaktable(false, true)
 		t.Options = options
 
 		super.Derivatives[name] = t
@@ -692,7 +701,7 @@ do
 			return false
 		end
 		
-		if obj == super then
+		if obj:GetCode() == super:GetCode() then
 			return true
 		end
 

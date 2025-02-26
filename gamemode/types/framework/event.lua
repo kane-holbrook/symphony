@@ -4,7 +4,13 @@ EVENTRESULT:CreateProperty("Result")
 EVENTRESULT:CreateProperty("Data")
 EVENTRESULT:CreateProperty("Name")
 
+function EVENTRESULT.Prototype:Cancel()
+    self:SetCancelled(true)
+end
+
+
 local EVENTBUS = Type.Register("EventBus")
+EVENTBUS.Stack = {}
 function EVENTBUS.Prototype:Initialize()
 end
 
@@ -58,9 +64,22 @@ end
 function EVENTBUS.Prototype:Run(name, ...)
     local h = self[name]
     
+    local key = self:GetId() .. ":" .. name
+        
     if name ~= "*" then
+        
+        if EVENTBUS.Stack[key] then
+            local er = Type.New(EVENTRESULT)
+            er:SetName(name)
+            er:SetData({...})
+            er:SetCancelled(true)
+            return er
+        end
+        EVENTBUS.Stack[key] = true
+        
         local er = self:Run("*", name, ...)
         if er:GetCancelled() then
+            EVENTBUS.Stack[key] = nil
             return er
         end
     end
@@ -69,7 +88,8 @@ function EVENTBUS.Prototype:Run(name, ...)
     er:SetName(name)
     er:SetData({...})
 
-    if not h then 
+    if not h then
+        EVENTBUS.Stack[key] = nil
         return er
     end
 
@@ -88,6 +108,7 @@ function EVENTBUS.Prototype:Run(name, ...)
     end
 
     Event = nil
+    EVENTBUS.Stack[key] = nil
     return er
 end
 

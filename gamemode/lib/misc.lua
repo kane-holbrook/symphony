@@ -5,9 +5,10 @@ REALM_CLIENT = 2
 REALM_SHARED = 3
 REALM = SERVER and REALM_SERVER or REALM_CLIENT
 
+print("BOOP")
 
 -- Creates a timer if it doesn't exist
-function defer(name, time, func, ...)
+function debounce(name, time, func, ...)
     time = time or 0
     if (!timer.Exists(name)) then
         local args = {...}
@@ -15,11 +16,11 @@ function defer(name, time, func, ...)
     end
 end
 
-function cancelDefer(name)
+function cancelDebounce(name)
     timer.Remove(name)
 end
 
-function adjustDefer(name, time)
+function adjustDebounce(name, time)
     timer.Adjust(name, time)
 end
 
