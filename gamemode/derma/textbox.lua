@@ -12,12 +12,11 @@ local PANEL = xvgui.RegisterFromXML("Textbox", [[
         Radius="2ss"
         StrokeColor="Color(255, 255, 255, 16)" 
         Fill="Material(sstrp25/ui/window-hazard.png)"
-        FillColor="Color(158, 200, 213, 16)" 
+        FillColor="Color(158, 200, 213, 8)" 
         FillRepeatX="true" 
         FillRepeatY="true" 
         FillRepeatScale="0.01"
-        Hover:StrokeColor="Color(255, 255, 255, 64)"
-        Hover:FillColor="Color(158, 200, 213, 64)"
+        Hover:StrokeColor="Color(255, 255, 255, 32)"
         Flex="4"
         PaddingLeft="1cw"
         PaddingRight="1cw"
@@ -53,11 +52,9 @@ function PANEL:Init()
             self.Setting = true
             self.TextEntry:SetText(self:GetProperty("Value", true))
             self.Setting = false
-            print("Reset")
             return
         end
 
-        print("Setting value")
         self:SetProperty("Value", self.TextEntry:GetValue())
     end
 
@@ -68,9 +65,21 @@ function PANEL:Init()
     self.TextEntry.OnCursorExited = function ()
         self:Emit("CursorExited")
     end
+
+    self.TextEntry.OnGetFocus = function ()
+        self:Emit("GetFocus")
+    end
+
+    self.TextEntry.OnLoseFocus = function ()
+        self:Emit("LoseFocus")
+    end
 end
 
 function PANEL:OnPropertyChanged(key, value)
+    if XPanel.OnPropertyChanged(self, key, value) then
+        return true
+    end
+
     if key == "Value" then
         self.Setting = true
         self.TextEntry:SetValue(value)

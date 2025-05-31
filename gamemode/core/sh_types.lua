@@ -68,6 +68,21 @@ do
 		setmetatable(t, mt)
 		table.insert(self.Instances, t)
 
+		for k, v in pairs(self:GetPropertiesMap()) do
+			local default = v.Options.Default
+			if default == nil then
+				continue
+			end
+
+			if isfunction(default) then
+				t[k] = default(t)
+			elseif istable(default) then
+				t[k] = table.Copy(default)
+			else
+				t[k] = default
+			end
+		end
+
 		Type.Instances[t:GetId()] = t
 
 		t:Initialize()
@@ -188,7 +203,12 @@ do
 		for k, v in pairs(self.PropertiesByName) do
 			props[k] = v
 		end
+		
 		return props
+	end
+
+	function TYPE:GetProperty(name)
+		return self.PropertiesByName[name]
 	end
 
 	-- Prototype
@@ -413,8 +433,8 @@ end
 local OBJ = TYPE.Prototype
 do
 	-- @test Type.New
-	function OBJ:Initialize()
-		base(self, "Initialize")
+	function OBJ:Initialize(id)
+		base(self, "Initialize", id)
 	end
 
 	-- Single threaded so this isn't a problem
@@ -426,6 +446,9 @@ do
 	-- @test Type.New
 	function base(self, name, ...)
 		
+		assert(self and self.GetBase, "base() called without self", 2)
+		assert(name, "base() called without a name", 2)
+
 		local top = false
 
 		-- If we're calling it for the first time, we're the bottom-most object.
@@ -610,6 +633,17 @@ do
 		local qry = "DELETE FROM `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(key) .. "` = " .. Type.GetType(id):DatabaseEncode(id)
 		mt.LastRefresh = nil
 		return Database.Query(qry)
+	end
+
+	function OBJ:IsValid()
+		return not self.Disposed
+	end
+
+	function OBJ:Dispose()
+		Type.Instances[self:GetId()] = nil
+		self:GetType().Instances[self:GetId()] = nil
+		self:GetType().InstanceCount = self:GetType().InstanceCount - 1
+		self.Disposed = true
 	end
 end
 

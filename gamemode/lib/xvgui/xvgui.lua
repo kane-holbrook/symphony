@@ -102,6 +102,34 @@ xvgui.RegisterSpecialTag("Listen", function (parent, node, ctx)
     error("Must provide a FQR=, Hook=, or Delay= attribute.")
 end)
 
+xvgui.RegisterSpecialTag("Style", function (parent, node, ctx)
+    local style = node.Attributes["Ref"]
+
+    local root = parent:GetProperty("Root")
+    root = root or parent
+
+    node.Attributes["Name"] = nil
+    root.Styles = root.Styles or {}
+    root.Styles[style] = node.Attributes    
+
+    return true
+end)
+
+xvgui.RegisterSpecialAttribute("Style", function (el, value, node, ctx)
+    assert(ctx.Scope, "Styles can only be specified for components")
+    
+    local root = ctx.Scope
+    root = root or parent
+    assert(root.Styles, "This component has no styles.")
+    
+    local style = root.Styles[value]
+    assert(style, "Invalid style:" .. value)
+
+    for k, v in pairs(style) do
+        el:SetProperty(k, v)
+    end
+end)
+
 xvgui.RegisterSpecialTag("For", function (parent, node, ctx)
     local run = node.Attributes["Run"]
     if run then

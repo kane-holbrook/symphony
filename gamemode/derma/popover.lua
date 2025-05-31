@@ -7,6 +7,7 @@ local PANEL = {}
 local Popovers = {}
 
 function PANEL:Init()
+    xvgui.Apply(self)
     self:SetProperty("Absolute", true)
 end
 
@@ -15,6 +16,9 @@ function PANEL:Open()
     self:SetProperty("Display", true)
     self:SetProperty("Opened", true)
     self:MakePopup()
+
+    self:SetKeyboardInputEnabled(false)
+    self:SetDrawOnTop(true)
 
     -- Why does it take two layouts to calculate the size?
     self:InvalidateChildren(true)

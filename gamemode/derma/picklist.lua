@@ -22,8 +22,9 @@ local PANEL = xvgui.RegisterFromXML("Picklist", [[
         FontWeight="800"
         FontColor="Color(182, 208, 216, 255)" 
         FontName="Rajdhani" 
-        :Click="function ()
+        :On:Click="function ()
             self.Menu:Toggle()
+            return true
         end"
         :On:Change:Value="function (el, value)
             self:SetProperty('Value', value)
@@ -86,6 +87,11 @@ function PANEL:Init()
 end
 
 function PANEL:OnPropertyChanged(key, value)
+    
+    if XPanel.OnPropertyChanged(self, key, value) then
+        return true
+    end
+
     if key == "Placeholder" then
         self.TextEntry:SetPlaceholderText(value)
     end
@@ -101,8 +107,9 @@ PANEL = xvgui.RegisterFromXML("PicklistEntry", [[
         FillColor="Color(0, 0, 0, 0)" 
         Cursor="hand" 
         Hover:FillColor="Color(255, 255, 255, 8)"
-        :Click="function ()
+        :On:Click="function ()
             self:Emit('Change:Value', self:GetValue())
+            return true
         end"
     >
         <Rect Ref="Content" Slot="Default" />

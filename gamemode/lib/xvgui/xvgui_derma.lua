@@ -8,6 +8,7 @@ local BasePanel = FindMetaTable("Panel")
 function BasePanel:LoadXML()
     assert(self.Xml, "There is no XML associated with this panel.")
 
+    
     local parent = self:GetParent()
     local t = self.Xml
     
@@ -18,6 +19,7 @@ function BasePanel:LoadXML()
             sa(el, parent, node)
         else
             self:SetProperty(k, v)
+            self:Debug("Set", k, v)
         end
     end
 
@@ -141,7 +143,12 @@ do
 
     function BasePanel:OnPropertyChanged(name, value, old)
         if name == "Ref" then
-            assert(not old, "You can't change the Ref property more than once.")
+
+            local rp = self:GetProperty("RefParent", true)
+            if old and rp then
+                rp[old] = nil
+                self:SetProperty("RefParent", nil)
+            end
 
             self:Emit("Change:Ref", self, value)
             return true
@@ -219,7 +226,7 @@ do
                 self.FuncEnv[k] = p.Value
             end
 
-            local ref = self:GetProperty("Ref")
+            local ref = self:GetProperty("Ref", true)
             if ref then
                 self.FuncEnv[ref] = self
             end
@@ -350,14 +357,24 @@ do
             local name = args[2]
             local old = args[3]
 
-            --print(el, name, old, self == el, self, self:GetProperty("RefParent", true))
+            if self == el then
+                return
+            end
 
             self[name] = el
             el:SetProperty("RefParent", self)
+
+            self:Debug("Ref", name, el, self)
             return true
         end
     end
     xvgui.HandleEmit = BasePanel.HandleEmit
+end
+
+function BasePanel:Debug(...)
+    if self:GetProperty("Debug", true) then
+        print(...)
+    end
 end
 
 function BasePanel:XMLHandleText(text, node, ctx)

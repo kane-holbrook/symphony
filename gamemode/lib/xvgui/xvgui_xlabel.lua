@@ -42,17 +42,59 @@ PANEL.IsXLabel = true
 function PANEL:Init()
     self:SetProperty("Text", "")
     self:SetProperty("Flex", 4)
+    self:SetProperty("Wrap", false)
 end
 
 function PANEL:OnPropertyChanged(name, value, old)
     XPanel.OnPropertyChanged(self, name, value, old)
 
     if name == "Text" then
-        self.Lines = string.Split(value, "\n")
+        self:CalculateWrap(value)
+    end
+end
+
+function PANEL:CalculateWrap(value)
+    self.Lines = {}
+
+    if self:GetProperty("Wrap", true) then
+       
+        local words = string.Split(self:GetProperty("Text", true) or "", " ")
+
+        self.Lines = {}
+
+        local x = 0
+        local y = 0
+        local h2 = 0
+        for k, v in pairs(words) do
+            local w, h = surface.GetTextSize(v)
+            h2 = h
+
+            if x + w > self:GetWide() then
+                y = y + h
+                x = 0
+            end
+
+            if not self.Lines[y] then
+                self.Lines[y] = ""
+            end
+
+            self.Lines[y] = self.Lines[y] .. v .. " "
+            x = x + w
+        end
+        self.WrapW = x
+        self.WrapH = y + h2/2
+
+    else
+        self.Lines = string.Split(value or self:GetProperty("Text", true), "\n")
     end
 end
 
 function PANEL:CalculateSize()
+
+    if self:GetProperty("Wrap", true) then
+        self:SetSize(self.WrapW, self.WrapH)
+        return self.WrapW, self.WrapH
+    end
 
     surface.SetFont(self:CalculateFont())
 
@@ -75,12 +117,22 @@ function PANEL:Paint(w, h)
 
     if self.Lines then
         local mh = 0
+        local flex = self:GetProperty("Flex", true) or 7
         for k, v in pairs(self.Lines) do
-            surface.SetTextPos(0, mh)
-            surface.DrawText(v)
             
-            local x, y = surface.GetTextSize(v)
-            mh = mh + y
+            local x, y = 0, mh
+            local w2, h2 = surface.GetTextSize(v)
+
+            if isany(flex, 8, 5, 2) then
+                x = (w - w2) / 2
+            elseif isany(flex, 9, 6, 3) then
+                w = w - w2
+            end
+
+            surface.SetTextPos(x, mh)
+            surface.DrawText(v)
+            mh = mh + h2
+            
         end     
     end
 end

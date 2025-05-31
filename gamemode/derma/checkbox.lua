@@ -1,12 +1,13 @@
 AddCSLuaFile()
 if SERVER then return end
 local PANEL = xvgui.RegisterFromXML("Checkbox", [[
-    <Rect Height="1.25ch" Flex="4" Hover="true" Cursor="hand" Value="false" :Click="function (...)
+    <Rect Height="1.25ch" Flex="4" Hover="true" Cursor="hand" Value="false" :On:Click="function (...)
         if not isfunction(self:GetProperty('Value', true)) then
             self:SetProperty('Value', not self:GetProperty('Value', true))
         end
         self:Emit('Change:Value', self, self:GetProperty('Value', true))
         self:InvalidateLayout()
+        return true
     end">
         <Rect Ref="Top" 
             Height="1ph"
@@ -19,18 +20,18 @@ local PANEL = xvgui.RegisterFromXML("Checkbox", [[
             FillRepeatX="true" 
             FillRepeatY="true" 
             FillRepeatScale="0.01"
-            Hover:StrokeColor="Color(255, 255, 255, 64)"
-            Hover:FillColor="Color(158, 200, 213, 64)"
+            Hover:StrokeColor="Color(255, 255, 255, 32)"
+            Hover:FillColor="Color(158, 200, 213, 32)"
             Flex="5"
             Gap="1ss"
-            :FontSize="(PH * (ScrH()/480))/10"
+            :FontSize="(PH * (ScrH()/480))/7"
             FontWeight="800"
             MarginRight="2cw"
         >
             <XLabel :Text="Value and '✓' or ''" />
         </Rect>
 
-        <XLabel :Text="Label or ''" />
+        <XLabel :Text="isstring(Label) and Label or ''" />
     </Rect>    
 ]])
 function PANEL:Init()

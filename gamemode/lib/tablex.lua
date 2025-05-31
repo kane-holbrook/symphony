@@ -2,6 +2,54 @@ AddCSLuaFile()
 
 tablex = {}
 
+function tablex.SortByMemberEx(tab, memberName, bAsc, preserve)
+    tab = preserve and tab or tablex.ShallowCopy(tab)
+
+	local TableMemberSort = function( a, b, MemberName, bReverse )
+
+		--
+		-- All this error checking kind of sucks, but really is needed
+		--
+		if ( !istable( a ) and not getmetatable(a).__index ) then return !bReverse end
+		if ( !istable( b ) and not getmetatable(b).__index ) then return bReverse end
+
+        local a_name = a[MemberName]
+        local b_name = b[MemberName]
+
+		if ( not a_name ) then return !bReverse end
+		if ( not b_name ) then return bReverse end
+
+        if isfunction(a_name) then
+            a_name = a_name(a)
+        end
+
+        if isfunction(b_name) then
+            b_name = b_name(b)
+        end
+        
+
+		if ( isstring( a_name ) ) then
+
+			if ( bReverse ) then
+				return a_name:lower() < b_name:lower()
+			else
+				return a_name:lower() > b_name:lower()
+			end
+
+		end
+
+		if ( bReverse ) then
+			return a_name < b_name
+		else
+			return a_name > b_name
+		end
+
+	end
+
+	table.sort( tab, function( a, b ) return TableMemberSort( a, b, memberName, bAsc or false ) end )
+    return tab
+end
+
 function tablex.StringIndex(t, str)
     local out = t
 

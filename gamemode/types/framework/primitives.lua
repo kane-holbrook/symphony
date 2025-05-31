@@ -93,15 +93,20 @@ debug.setmetatable(debug.setmetatable, {
     Type = FUNCTION
 })
 
-
 local BOOLEAN = Type.Register("Boolean", PRIMITIVE, { Code = TYPE_BOOL, DatabaseType = "BOOLEAN" })
 function BOOLEAN:Parse(value)
+    
+    if isbool(value) then
+        return value
+    end
+
     value = string.lower(value)
     if value == "true" then
         return true
     elseif value == "false" then
         return false
     end
+
     return nil
 end
 
@@ -136,6 +141,10 @@ PopulateMetaTable(FindMetaTable("Entity"), ENTITY)
 
 local VECTOR = Type.Register("Vector", PRIMITIVE, { Code = TYPE_VECTOR, DatabaseType = "CHAR(16)" })
 function VECTOR:Parse(value)
+    if istable(value) then
+        return value
+    end
+
     local x, y, z = string.match(value, "%(([%d%.]+),%s*([%d%.]+),%s*([%d%.]+)%)")
     return Vector(tonumber(x), tonumber(y), tonumber(z))
 end
@@ -152,6 +161,10 @@ PopulateMetaTable(FindMetaTable("Vector"), VECTOR)
 
 local ANGLE = Type.Register("Angle", PRIMITIVE, { Code = TYPE_ANGLE, DatabaseType = "CHAR(16)" })
 function ANGLE:Parse(value)
+    if istable(value) then
+        return value
+    end
+
     local p, y, r = string.match(value, "%(([%d%.]+),%s*([%d%.]+),%s*([%d%.]+)%)")
     return Angle(tonumber(p), tonumber(y), tonumber(r))
 end
@@ -168,6 +181,10 @@ PopulateMetaTable(FindMetaTable("Angle"), ANGLE)
 
 local COLOR = Type.Register("Color", PRIMITIVE, { Code = TYPE_COLOR, DatabaseType = "CHAR(16)" })
 function COLOR:Parse(value)
+    if istable(value) then
+        return value
+    end
+
     if value == nil then
         return color_transparent
     end
@@ -208,6 +225,10 @@ PopulateMetaTable(FindMetaTable("Color"), COLOR)
 
 local MATRIX = Type.Register("Matrix", PRIMITIVE, { Code = TYPE_MATRIX, DatabaseType = "JSON" })
 function MATRIX:Parse(value)
+    if ismatrix(value) then
+        return value
+    end
+
     return Matrix(util.JSONToTable(value))
 end
 
@@ -234,6 +255,10 @@ function TABLE:Deserialize(obj, data)
 end
 
 function TABLE:Parse(value)
+    if istable(value) then 
+        return value
+    end
+
     return util.JSONToTable(value)
 end
 
@@ -241,6 +266,10 @@ end
 
 local MATERIAL = Type.Register("Material", PRIMITIVE, { Code = TYPE_MATERIAL })
 function MATERIAL:Parse(value)
+    if not isstring(value) then
+        return value
+    end
+
     return Material(value, "mips smooth noclamp")
 end
 
@@ -254,6 +283,37 @@ end
 PopulateMetaTable(FindMetaTable("IMaterial"), MATERIAL)
 
 
+
+local CALLABLE = Type.Register("Callable")
+CALLABLE:CreateProperty("Function")
+
+function CALLABLE.Metamethods:__call(...)
+    return self:GetFunction()(...)
+end
+
+function CALLABLE.Metamethods:__tostring()
+    return "Callable[" .. tostring(self:GetFunction()) .. "]"
+end
+
+function wrapfunc(f)
+    if istable(f) then
+        return f
+    end
+
+    local c = Type.New(CALLABLE)
+    c:SetFunction(f)
+    return c
+end
+
+function iscallable(obj)
+    if isfunction(obj) then
+        return true
+    elseif istable(obj) then
+        return getmetatable(obj).__call ~= nil
+    else
+        return false
+    end
+end
 
 
 function Type.IsPrimitive(obj, allowNil)

@@ -388,3 +388,143 @@ function OCTTREE.Prototype:GetElements(x, y, z)
     end
     return {}
 end
+
+local LINKEDLIST = Type.Register("LinkedList")
+function LINKEDLIST.Prototype:Initialize()
+    self.Head = nil
+    self.Tail = nil
+    self.Size = 0
+    self.Elements = weaktable(false, true)
+    self.Cache = nil
+end
+
+function LINKEDLIST.Prototype:Add(element, after)
+    assert(not self.Elements[element], "Element already exists")
+    local afterNode = after and self.Elements[after] or self.Tail
+    local node = {
+        Value = element,
+        Next = nil,
+        Prev = afterNode
+    }
+
+    if not afterNode then
+        -- List is empty
+        self.Head = node
+        self.Tail = node
+    else
+        node.Next = afterNode.Next
+        if afterNode.Next then
+            afterNode.Next.Prev = node
+        else
+            self.Tail = node
+        end
+
+        afterNode.Next = node
+    end
+
+    self.Elements[element] = node
+    self.Size = self.Size + 1
+    self.Cache = nil
+end
+
+function LINKEDLIST.Prototype:AddBefore(element, before)
+    assert(not self.Elements[element], "Element already exists")
+    local beforeNode = before and self.Elements[before] or self.Head
+    local node = {
+        Value = element,
+        Next = beforeNode,
+        Prev = beforeNode and beforeNode.Prev or nil
+    }
+
+    if not beforeNode then
+        -- List is empty
+        self.Head = node
+        self.Tail = node
+    else
+        if beforeNode.Prev then
+            beforeNode.Prev.Next = node
+        else
+            self.Head = node
+        end
+
+        beforeNode.Prev = node
+    end
+
+    self.Elements[element] = node
+    self.Size = self.Size + 1
+    self.Cache = nil
+end
+
+function LINKEDLIST.Prototype:Remove(element)
+    local node = self.Elements[element]
+    if not node then return false end
+    if node.Prev then
+        node.Prev.Next = node.Next
+    else
+        self.Head = node.Next
+    end
+
+    if node.Next then
+        node.Next.Prev = node.Prev
+    else
+        self.Tail = node.Prev
+    end
+
+    self.Elements[element] = nil
+    self.Size = self.Size - 1
+    self.Cache = nil
+    return true
+end
+
+function LINKEDLIST.Prototype:Contains(element)
+    return self.Elements[element] ~= nil
+end
+
+function LINKEDLIST.Prototype:Iterator()
+    local current = self.Head
+    return function()
+        if not current then return nil end
+        local value = current.Value
+        current = current.Next
+        return value
+    end
+end
+
+function LINKEDLIST.Prototype:GetTable()
+    if self.Cache then return self.Cache end
+    local elements = {}
+    local current = self.Head
+    while current do
+        table.insert(elements, current.Value)
+        current = current.Next
+    end
+
+    self.Cache = elements
+    return elements
+end
+
+function LINKEDLIST.Prototype:Next()
+    local idx = 0
+    local current = self.Head
+    return function()
+        if current then
+            local value = current.Value
+            current = current.Next
+            idx = idx + 1
+            return idx, value
+        end
+    end
+end
+
+function LINKEDLIST.Prototype:Previous()
+    local idx = self.Size
+    local current = self.Tail
+    return function()
+        if current then
+            local value = current.Value
+            current = current.Prev
+            idx = idx - 1
+            return value
+        end
+    end
+end

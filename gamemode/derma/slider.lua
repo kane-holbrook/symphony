@@ -38,23 +38,12 @@ local PANEL = xvgui.RegisterFromXML("XSlider", [[
                 FontName="Rajdhani"
                 FontWeight="500"
                 Radius="1cw"
-                Width="10cw"
+                PaddingX="1cw"
                 Height="1.5ch"
+                Flex="5"
                 FillColor="Color(16, 55, 66, 245)"
             >
-                <Rect 
-                    Grow="true" 
-                    Width="1pw"
-                    Flex="5" 
-                    Fill="Material(sstrp25/ui/window-hazard.png)"
-                    FillColor="Color(158, 200, 213, 32)" 
-                    FillRepeatX="true" 
-                    FillRepeatY="true" 
-                    Radius="1cw"
-                    FillRepeatScale="0.05"
-                >
-                    <XLabel Ref="Text" :Text="Value" />
-                </Rect>
+                <XLabel Ref="Text" :Text="Value" />
             </Popover>
         </Rect>
     </Rect>

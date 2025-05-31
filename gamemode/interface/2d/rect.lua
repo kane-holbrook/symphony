@@ -4,7 +4,7 @@ if SERVER then
 end 
 
 local BasePanel = FindMetaTable("Panel")
-XPanel = {}
+Rect = {}
 
 --[[
     Properties ✓
@@ -44,22 +44,24 @@ XPanel = {}
 ]]
 
 local PANEL = {}
-PANEL.IsXPanel = true
-PANEL.IsXVGUI = true
+PANEL.IsRect = true
+PANEL.SymInitialized = true
 
 function PANEL:Init()
     self.Uuid = uuid()
     self.Children = {}
     self.Transitions = {}
+    self.LastPaint = CurTime()
     self.PropertyCache = {}
-
+    
     self:SetProperty("Flex", 7)
     self:SetProperty("Direction", "X")
-    self:SetProperty("Absolute", false)
+    self:SetProperty("Background", color_transparent)
+    self.EventBus = new(Type.EventBus)
 end
-XPanel.Init = PANEL.Init
+Rect.Init = PANEL.Init
 
-function PANEL:SetProperty(name, value)
+function PANEL:SetProperty(name, value, asFunction)
     assert(name, "Must provide a property name")
     
     self.Properties = self.Properties or {} 
@@ -76,8 +78,9 @@ function PANEL:SetProperty(name, value)
     end
 
     local old = p.Value
-    if isfunction(value) then
+    if isfunction(value) and not asFunction then
         p.Func = value
+        self.PropertyCache[name] = nil
     else
         p.Func = nil
         p.Value = value
@@ -95,50 +98,44 @@ function PANEL:SetProperty(name, value)
         if value ~= old then
             self:OnPropertyChanged(name, value, old)
         end
+        self.PropertyCache[name] = p.Value
     end
 
     self.Properties[name] = p
-    self.PropertyCache[name] = nil
 end
-XPanel.SetProperty = PANEL.SetProperty
+Rect.SetProperty = PANEL.SetProperty
 
-local empty = {}
 function PANEL:GetProperty(name, noRecurse, ignoreSelectors)    
-    if not noRecurse then
-        local val = self.PropertyCache[name]
-        if val then
-            if val == empty then
-                return nil
-            else
-                return val
-            end
-        end
+    local val = self.PropertyCache[name]
+    if val ~= nil then
+        return val
     end
 
     if not ignoreSelectors then
-        local hovered = self:GetProperty("Hovered", false, true)
+        local hovered = self:GetProperty("Hovered", true, true)
         local selected = self:GetProperty("Selected", false, true)
 
         if hovered and selected then
-            local r = xvgui.GetProperty(self, "Hover:Selected:" .. name, noRecurse) or xvgui.GetProperty(self, "Hover:" .. name, noRecurse) or xvgui.GetProperty(self, name, noRecurse)
+            local r = Interface.GetProperty(self, "Hover:Selected:" .. name, noRecurse) or Interface.GetProperty(self, "Hover:" .. name, noRecurse) or Interface.GetProperty(self, name, noRecurse)
             self.PropertyCache[name] = r
             return r
         elseif hovered then
-            local r = xvgui.GetProperty(self, "Hover:" .. name, noRecurse) or xvgui.GetProperty(self, name, noRecurse)
+            local r = Interface.GetProperty(self, "Hover:" .. name, noRecurse) or Interface.GetProperty(self, name, noRecurse)
             self.PropertyCache[name] = r
             return r
         elseif selected then
-            local r = xvgui.GetProperty(self, "Selected:" .. name, noRecurse) or xvgui.GetProperty(self, name, noRecurse)
+            local r = Interface.GetProperty(self, "Selected:" .. name, noRecurse) or Interface.GetProperty(self, name, noRecurse)
             self.PropertyCache[name] = r
             return r
         end
     end
 
-    local r = xvgui.GetProperty(self, name, noRecurse)
+    local r = Interface.GetProperty(self, name, noRecurse)
+    
     self.PropertyCache[name] = r or empty
     return r
 end
-XPanel.GetProperty = PANEL.GetProperty
+Rect.GetProperty = PANEL.GetProperty
 
 function PANEL:SetPropertyOption(name, key, value)
     assert(name, "Must provide a property name")
@@ -155,7 +152,15 @@ function PANEL:SetPropertyOption(name, key, value)
 
     self.Properties[name] = p
 end
-XPanel.SetPropertyOption = PANEL.SetPropertyOption
+Rect.SetPropertyOption = PANEL.SetPropertyOption
+
+function PANEL:Transition(property, to, duration, easing)
+    local t= {}
+    t.value = self:GetProperty(property, true)
+    t.tween = neonate.new(duration, t.value, to, easing)
+    self.Transitions[property] = t
+end
+Rect.Transition = PANEL.Transition
 
 -- Children management
 function PANEL:GenerateChildrenCache(child, force)
@@ -173,7 +178,7 @@ function PANEL:GenerateChildrenCache(child, force)
         end
     end
 end
-XPanel.GenerateChildrenCache = PANEL.GenerateChildrenCache
+Rect.GenerateChildrenCache = PANEL.GenerateChildrenCache
 
 function PANEL:GetChildren()
     local out = {}
@@ -185,7 +190,7 @@ function PANEL:GetChildren()
 
     return out
 end
-XPanel.GetChildren = PANEL.GetChildren
+Rect.GetChildren = PANEL.GetChildren
 
 function PANEL:OnChildAdded(child)
     self:GenerateChildrenCache(child)
@@ -208,7 +213,7 @@ function PANEL:OnChildAdded(child)
         end
     end)--]]
 end
-XPanel.OnChildAdded = PANEL.OnChildAdded
+Rect.OnChildAdded = PANEL.OnChildAdded
 
 function PANEL:OnChildRemoved(child)
     self:GenerateChildrenCache(nil, true)
@@ -216,14 +221,14 @@ function PANEL:OnChildRemoved(child)
     local p_w = self:GetProperty("Width", true)
     local p_h = self:GetProperty("Height", true)
 end
-XPanel.OnChildRemoved = PANEL.OnChildRemoved
+Rect.OnChildRemoved = PANEL.OnChildRemoved
 
 function PANEL:CalculateChildrenSize()
     local tw, th = 0, 0
 
     local minx, miny = math.huge, math.huge
     for k, v in pairs(self:GetChildren()) do
-        if not v:GetProperty("Display") or v:GetProperty("Absolute", true) then
+        if not v:GetProperty("Display") then
             continue
         end
 
@@ -233,7 +238,7 @@ function PANEL:CalculateChildrenSize()
     end
 
     for k, v in pairs(self:GetChildren()) do
-        if not v:GetProperty("Display") or v:GetProperty("Absolute", true) then
+        if not v:GetProperty("Display") then
             continue
         end
 
@@ -247,7 +252,7 @@ function PANEL:CalculateChildrenSize()
 
     return tw, th
 end
-XPanel.CalculateChildrenSize = PANEL.CalculateChildrenSize
+Rect.CalculateChildrenSize = PANEL.CalculateChildrenSize
 
 function PANEL:SizeToChildren(sizeW, sizeH)
     local w, h = self:CalculateChildrenSize()
@@ -255,10 +260,10 @@ function PANEL:SizeToChildren(sizeW, sizeH)
 
     self:SetSize(sizeW and w + pl + pr or self:GetWide(), sizeH and h + pt + pb or self:GetTall())
 end
-XPanel.SizeToChildren = PANEL.SizeToChildren
+Rect.SizeToChildren = PANEL.SizeToChildren
 
 function PANEL:PerformLayout(w, h, noSet)
-    w, h = xvgui.PerformLayout(self, w, h)
+    w, h = Interface.PerformLayout(self, w, h)
 
     if self:GetProperty("SuppressLayout") then
         return true
@@ -304,7 +309,7 @@ function PANEL:PerformLayout(w, h, noSet)
     end
     return w, h, x, y
 end
-XPanel.PerformLayout = PANEL.PerformLayout
+Rect.PerformLayout = PANEL.PerformLayout
 
 function PANEL:CalculateName()
     local ref = self:GetProperty("Ref", true)
@@ -314,7 +319,7 @@ function PANEL:CalculateName()
 
     return self.ClassName
 end
-XPanel.CalculateName = PANEL.CalculateName
+Rect.CalculateName = PANEL.CalculateName
 
 function PANEL:CalculatePosition()
     return self:GetProperty("X", true), self:GetProperty("Y", true)
@@ -327,29 +332,29 @@ function PANEL:CalculatePosition()
         end
     end--]]
 end
-XPanel.CalculatePosition = PANEL.CalculatePosition
+Rect.CalculatePosition = PANEL.CalculatePosition
 
 function PANEL:CalculatePadding()
     return self:GetProperty("PaddingLeft", true) or 0, self:GetProperty("PaddingTop", true) or 0, self:GetProperty("PaddingRight", true) or 0, self:GetProperty("PaddingBottom", true) or 0
 end
-XPanel.CalculatePadding = PANEL.CalculatePadding
+Rect.CalculatePadding = PANEL.CalculatePadding
 
 function PANEL:CalculateMargin()
     return self:GetProperty("MarginLeft", true) or 0, self:GetProperty("MarginTop", true) or 0, self:GetProperty("MarginRight", true) or 0, self:GetProperty("MarginBottom", true) or 0
 end
-XPanel.CalculateMargin = PANEL.CalculateMargin
+Rect.CalculateMargin = PANEL.CalculateMargin
 
-function PANEL:CalculateRadius()
-    return self:GetProperty("TopLeftRadius", true), self:GetProperty("TopRightRadius", true), self:GetProperty("BottomRightRadius", true), self:GetProperty("BottomLeftRadius", true)
+function PANEL:CalculateBorderRadius()
+    return rawget(self.FuncEnv, "TopLeftRadius"), rawget(self.FuncEnv, "TopRightRadius"), rawget(self.FuncEnv, "BottomLeftRadius"), rawget(self.FuncEnv, "BottomRightRadius")-- self:GetProperty("TopLeftRadius", true), self:GetProperty("TopRightRadius", true), self:GetProperty("BottomRightRadius", true), self:GetProperty("BottomLeftRadius", true)
 end
-XPanel.CalculateMargin = PANEL.CalculateMargin
+Rect.CalculateMargin = PANEL.CalculateMargin
 
 function PANEL:CalculateSize()
     if self:GetProperty("Grow", true) then
         return
     end
 
-    if self:GetProperty("Display") == false then
+    if not self:GetProperty("Display") then
         return 0, 0
     end
     
@@ -367,20 +372,28 @@ function PANEL:CalculateSize()
         end
     end
 
+    local bg = self:GetProperty("Background", true)
+    if isfunction(bg) then
+        self.BackgroundInit = nil
+        self:GenerateMaterial("Background", bg, w, h)
+    end
+
     return math.Round(w, 0), math.Round(h, 0)
 end
-XPanel.CalculateSize = PANEL.CalculateSize
+Rect.CalculateSize = PANEL.CalculateSize
 
 function PANEL:GenerateMaterial(name, func, w, h)
     timer.Create(self.Uuid .. name, 1, 1, function ()
-        print("Generating", self.Uuid, name)
+        if not IsValid(self) then
+            return
+        end
+
         local result = func(w, h)
 
         if istable(result) then
             for k, v in pairs(result) do
                 if not IsColor(v) and v:GetInt("_loading") == 1 then
                     self:GenerateMaterial(name, func, w, h)
-                    print(" -> Skip")
                     return
                 end
             end
@@ -390,6 +403,20 @@ function PANEL:GenerateMaterial(name, func, w, h)
                     if IsColor(v) then
                         surface.SetDrawColor(v)
                         surface.DrawRect(0, 0, w, h)
+                    elseif istable(v) then
+                        print("Result is a table!")
+                        for k2, v2 in pairs(v) do
+                            if IsColor(v2) then
+                                surface.SetDrawColor(v2)
+                                surface.DrawRect(0, 0, w, h)
+                            else
+                                error("Material still loading")
+
+                                surface.SetMaterial(v2)
+                                surface.SetDrawColor(color_white)
+                                surface.DrawTexturedRect(0, 0, w, h)
+                            end
+                        end
                     else
                         if v:GetInt("_loading") == 1 then
                             continue
@@ -629,217 +656,247 @@ function PANEL:CalculateFlex(w, h)
         end
     end
 end
-XPanel.CalculateFlex = PANEL.CalculateFlex
-
+Rect.CalculateFlex = PANEL.CalculateFlex
 
 function PANEL:OnCursorEntered()
-    if self:GetProperty("Hover", true) then
-        self:SetProperty("Hovered", true)
-        self:Emit("StartHover")
-        self:InvalidateChildren(true)
-    else
-        self:Emit("CursorEntered")
-    end
+    self:Emit("Hover")
 end
+Rect.OnCursorEntered = PANEL.OnCursorEntered
 
 function PANEL:OnCursorExited()
-    if not self:GetFuncEnv().Hovered then
+    self:Emit("StopHover")
+end
+Rect.OnCursorExited = PANEL.OnCursorExited
+
+function PANEL:OnStartHover(child)
+    self:SetProperty("Hovered", true)
+    self:InvalidateLayout()
+end
+
+function PANEL:OnStopHover(child)
+    self:SetProperty("Hovered", false)
+    self:InvalidateLayout()
+end
+
+function PANEL:HandleEmit(panel, event, ...)
+    BasePanel.HandleEmit(self, panel, event, ...)
+
+    local r = self.EventBus:Run("Emit", self, panel, event, ...)
+
+    if r:GetCancelled() then
+        return true
+    end
+    
+    r = self.EventBus:Run(event, self, panel, ...)
+    if r:GetCancelled() then
         return
     end
 
-    if self:GetProperty("Hover", true) then
-        self:SetProperty("Hovered", false)
-        self:Emit("StopHover")
-        self:InvalidateChildren()
-    else
-        self:Emit("CursorExited")
+    if event == "Hover" and self:GetProperty("Hover", true) then
+        self:OnStartHover(panel, ...)
+        return true
+    end
+
+    if event == "StopHover" and self:GetProperty("Hover", true) then
+        self:OnStopHover(panel, ...)
+        return true
     end
 end
+Rect.HandleEmit = PANEL.HandleEmit
 
 function PANEL:OnMousePressed(code)
     if code == MOUSE_LEFT then
-        self:Emit("Click")
+        local cl = self:GetProperty("Click")
+        if cl then
+            cl(self)
+        end
     else
-        self:Emit("RightClick")
+        local cl = self:GetProperty("ContextMenu")
+        if cl then
+            cl(self)
+        end
     end
 end
-XPanel.OnMousePressed = PANEL.OnMousePressed
+Rect.OnMousePressed = PANEL.OnMousePressed
+
+-- We delay the calculation of a func background (1) so we can get a size and (2) wait a little while
+-- to ensure the size has stabilized.
+function PANEL:CalculateBackground()
+
+    if self.BackgroundScheduled then
+        return
+    end
+
+    local env = self:GetFuncEnv()
+    if not env then
+        return
+    end
+
+    local p = self.Properties.Background
+    if p.Value and env.LastW == env.Width and env.LastH == env.Height then
+        return
+    end
+
+    if p.Func then
+        self.BackgroundScheduled = true
+        
+        timer.Simple(0.1, function ()
+            local env = self:GetFuncEnv()
+            setfenv(p.Func, env)
+            local old = p.Value
+            local val = p.Func(val, old)
+            p.Value = val
+            env["Background"] = val
+
+            if val ~= old then
+                self:OnPropertyChanged("Background", val, old)
+            end
+
+            self.BackgroundScheduled = false
+        end)
+    end
+end
+Rect.CalculateBackground = PANEL.CalculateBackground
 
 function PANEL:CalculateFont()
     local font = self:GetProperty("FontName")
     local size = self:GetProperty("FontSize")
     local weight = self:GetProperty("FontWeight")
 
-    local p = xvgui.Font(font, size, weight)
+    local p = Interface.Font(font, size, weight)
     self:SetProperty("Font", p)
     
-    return xvgui.Font(font, size, weight)
+    return Interface.Font(font, size, weight)
 end
-XPanel.CalculateFont = PANEL.CalculateFont
+Rect.CalculateFont = PANEL.CalculateFont
 
-local blurtex = Material("pp/blurscreen")
-local notex = Material("vgui/white")
+NUM_STENCILS = 0
+
+local matBlurScreen = Material("pp/blurscreen")
 function PANEL:Paint(w, h)
-    local ct = CurTime()
-    --local dt = ct - self._LastPaint
+    for k, v in pairs(self.Transitions) do
+        local dt = CurTime() - self.LastPaint
+        local finished = v.tween:update(dt)
+        self:SetProperty(k, v.value)
 
-    --[[for k, v in pairs(self.Transitions) do
-        local complete = v.Tween:update(dt)
-
-        local val
-        if v.IsColor then
-            val = Color(unpack(unpack(v.Value)))
-        else
-            val = unpack(v.Value)
-        end
-
-        SetProperty(self, k, val, true)
-
-        if complete then
-            v.Promise:Complete()
+        if finished then
             self.Transitions[k] = nil
         end
-    end--]]
-
-    local blur = self:GetProperty("Blur", true) or 0
-    if blur > 0 then
-        local x, y = self:ScreenToLocal(0, 0)
-
-        self:StartStencil(w, h, 0, 0, false)
-            surface.SetDrawColor(255, 255, 255)
-            surface.SetMaterial(blurtex)
-            blurtex:SetFloat("$blur", blur)
-            blurtex:Recompute()
-            render.UpdateScreenEffectTexture()
-            surface.DrawTexturedRect(x, y, ScrW(), ScrH())
-        self:FinishStencil()
     end
 
-    local sw = self:GetProperty("StrokeWidth", true) or 0
-    if sw > 0 then
-        local w2 = w - sw * 2
-        local h2 = h - sw * 2
-        
-        self:StartStencil(w2, h2, sw, sw, true)
-            surface.SetMaterial(self:GetProperty("Stroke", true) or notex)
-            surface.SetDrawColor(self:GetProperty("StrokeColor", true) or color_white)
-            self:DrawStencil(0, 0, w, h)
-        self:FinishStencil()
-        
-        self:StartStencil(w2, h2, sw, sw)
-            local fillUnder = self:GetProperty("FillUnder", true)
-            if fillUnder then
-                surface.SetDrawColor(fillUnder)
-                surface.DrawRect(0, 0, w, h)
-            end
+    -- Stencils eat xxx frames 
 
-            local fillMaterial = self:GetProperty("Fill", true) or notex
+    local stencil
+    self:StartStencil(w, h)
 
-            if isfunction(fillMaterial) then
-                fillMaterial(w2, h2, sw, sw)
-            else
-                surface.SetMaterial(fillMaterial)
-                surface.SetDrawColor(self:GetProperty("FillColor", true) or color_transparent)
-                            
+    self:PaintBackground(w, h)
 
-                local repeatX = self:GetProperty("FillRepeatX", true) and (w / (fillMaterial:Width() * (self:GetProperty("FillRepeatScale", true) or 1))) or 1
-                local repeatY = self:GetProperty("FillRepeatY", true) and (h / (fillMaterial:Height() * (self:GetProperty("FillRepeatScale", true) or 1))) or 1
+    self:FinishStencil()
 
-                local u = self:GetProperty("U", true)
-                local v = self:GetProperty("V", true)
-                if u and v then
-                    print(u, v)
-                end
-                
-                surface.DrawTexturedRectUV(0, 0, w, h, u or 0, v or 0, repeatX, repeatY)
-            end
-        self:FinishStencil()
-    else
-        self:StartStencil(w, h)
-            local fillMaterial = self:GetProperty("Fill", true) or notex
-
-            if isfunction(fillMaterial) then
-                fillMaterial(w, h, 0, 0)
-            else
-                surface.SetMaterial(fillMaterial)
-                surface.SetDrawColor(self:GetProperty("FillColor", true) or color_transparent)
-
-                local repeatX = self:GetProperty("FillRepeatX", true) and (w / (fillMaterial:Width() * (self:GetProperty("FillRepeatScale", true) or 1))) or 1
-                local repeatY = self:GetProperty("FillRepeatY", true) and (h / (fillMaterial:Height() * (self:GetProperty("FillRepeatScale", true) or 1))) or 1
-
-                surface.DrawTexturedRectUV(0, 0, w, h, 0, 0, repeatX, repeatY)
-            end
-        self:FinishStencil()
-    end
-
-    self._LastPaint = ct
+    self.LastPaint = CurTime()
 end
-XPanel.Paint = PANEL.Paint
 
-
-function PANEL:StartStencil(w, h, x, y, invert)
-    
-    w = w or self:GetWidth()
-    h = h or self:GetHeight()
+function PANEL:StartStencil(w, h, x, y)
     x = x or 0
     y = y or 0
 
-    
-    draw.NoTexture()
-
-    render.SetStencilEnable(true)
-
-    render.ClearStencil()
-    render.SetStencilTestMask(255)
-    render.SetStencilWriteMask(255)
-    render.SetStencilPassOperation(STENCILOPERATION_KEEP)
-    render.SetStencilFailOperation(STENCILOPERATION_KEEP)
-    render.SetStencilCompareFunction(STENCILCOMPARISONFUNCTION_NEVER)
-
-    render.SetStencilReferenceValue(9)
-    render.SetStencilFailOperation(STENCILOPERATION_REPLACE)
-    
-    surface.SetDrawColor(color_black)
-    self:DrawStencil(x, y, w, h)
-    
-    render.SetStencilFailOperation(STENCILOPERATION_KEEP)
-    render.SetStencilCompareFunction(invert and STENCILCOMPARISONFUNCTION_NOTEQUAL or STENCILCOMPARISONFUNCTION_EQUAL)
-
-    surface.SetDrawColor(255, 255, 255, 255)
-
-end
-XPanel.StartStencil = PANEL.StartStencil
-
-function PANEL:DrawStencil(x, y, w, h)
-    
-    local btl, btr, bbr, bbl = self:CalculateRadius()
+    local btl, btr, bbr, bbl = self:CalculateBorderRadius()
     if btl or btr or bbr or bbl then
-        surface.DrawPoly(drawex.RoundedBox(x, y, w, h, btl or 0, btr or 0, bbr or 0, bbl or 0))
-    else
-        surface.DrawRect(x, y, w, h)
+        stencil = true
+        NUM_STENCILS = NUM_STENCILS + 1
+
+        draw.NoTexture()
+
+        render.SetStencilEnable(true)
+
+        render.ClearStencil()
+        render.SetStencilTestMask(255)
+        render.SetStencilWriteMask(255)
+        render.SetStencilPassOperation(STENCILOPERATION_KEEP)
+        render.SetStencilFailOperation(STENCILOPERATION_KEEP)
+        render.SetStencilCompareFunction(STENCILCOMPARISONFUNCTION_NEVER)
+
+        render.SetStencilReferenceValue(9)
+        render.SetStencilFailOperation(STENCILOPERATION_REPLACE)
+        
+        surface.SetDrawColor(color_black)
+        self:DrawBorderRadius(x, y, w, h)
+        
+        render.SetStencilFailOperation(STENCILOPERATION_KEEP)
+        render.SetStencilCompareFunction(invert and STENCILCOMPARISONFUNCTION_NOTEQUAL or STENCILCOMPARISONFUNCTION_EQUAL)
+
+        surface.SetDrawColor(255, 255, 255, 255)
     end
 end
-XPanel.DrawStencil = PANEL.DrawStencil
+
+function PANEL:DrawBorderRadius(x, y, w, h)
+    surface.DrawPoly(drawex.RoundedBox(0, 0, w, h, btl or 0, btr or 0, bbr or 0, bbl or 0))
+end
 
 function PANEL:FinishStencil()
     render.SetStencilEnable(false)
 end
-XPanel.FinishStencil = PANEL.FinishStencil
+
+function PANEL:PaintBorder(w, h)
+    local border = self:GetProperty("Border")
+    if border then
+    end
+end
+
+function PANEL:PaintBackground(w, h)
+    local bg = self:GetProperty("Background")
+    if self:GetProperty("Background", true) then
+        --local bg = self.Background
+        if bg then
+            if IsColor(bg) then
+                surface.SetDrawColor(bg)
+                surface.DrawRect(0, 0, w, h)
+                self.BackgroundInit = 0
+            else
+                bg = self.Background
+                if bg and bg.GetInt and bg:GetInt("_loading") ~= 1 then
+                    surface.SetMaterial(bg)
+                    surface.SetDrawColor(color_white)
+                    surface.DrawTexturedRect(0, 0, w, h)
+                    
+                    if not self.BackgroundInit then 
+                        self.BackgroundInit = CurTime()
+                    end
+                end
+            end
+        else
+            surface.SetDrawColor(self:GetProperty("BackgroundFallback"))
+            surface.DrawRect(0, 0, w, h)
+        end
+
+        if self.BackgroundInit then
+
+            local elapsed = CurTime() - self.BackgroundInit
+            local prog = (elapsed / 0.3)
+            if prog < 1 then
+                local col = self:GetProperty("BackgroundFallback")                
+                col.a = 255 - math.Clamp(prog * 255, 0, 255)
+
+                surface.SetDrawColor(col)
+                surface.DrawRect(0, 0, w, h)
+            end
+        end
+
+        
+    end
+end
+Rect.Paint = PANEL.Paint
+Rect.PaintBackground = PANEL.PaintBackground
 
 
 function PANEL:OnPropertyChanged(prop, value, old)
-    if xvgui.OnPropertyChanged(self, prop, value, old) then
+    if Interface.OnPropertyChanged(self, prop, value, old) then
         return true
     end
     
     local p = self:GetParent()
     if prop == "Name" then
         self:SetName(value)
-        return true
-    end
-
-    if prop == "Hover" and value then
-        self:SetProperty("Hovered", false)
         return true
     end
 
@@ -897,7 +954,17 @@ function PANEL:OnPropertyChanged(prop, value, old)
         return true
     end
 
-    if p.IsXPanel and (prop == "Display" or prop == "X" or prop == "Y" or prop == "Width" or prop == "Height") then
+    if prop == "Background" then
+        if isfunction(value) then
+            self.Background = nil
+            self.BackgroundInit = nil
+            self:GenerateMaterial("Background", value, self:GetWide(), self:GetTall())
+        else
+            self.Background = value
+        end
+    end
+
+    if p.IsRect and (prop == "Display" or prop == "X" or prop == "Y" or prop == "Width" or prop == "Height") then
         -- For positionals, do nothing if the value is set to nil.
         if prop ~= "Display" and not value then
             return true
@@ -910,13 +977,36 @@ function PANEL:OnPropertyChanged(prop, value, old)
         return true
     end
 end
-XPanel.OnPropertyChanged = PANEL.OnPropertyChanged
+Rect.OnPropertyChanged = PANEL.OnPropertyChanged
 BasePanel.CalculateMargin = PANEL.CalculateMargin
 
 
 local wp = vgui.GetWorldPanel()
 
 -- GMod default: 13px Tahoma, anti-aliased.
-
-vgui.Register("XPanel", PANEL, "EditablePanel")
+wp:SetProperty("BackgroundFallback", color_black)
 vgui.Register("Rect", PANEL, "EditablePanel")
+
+
+Interface.RegisterAttribute("Panel", "BackgroundFallback", Type.Color)
+Interface.RegisterAttribute("Rect", "Background", Type.Color)
+
+Interface.RegisterAttribute("Rect", "Padding", Interface.Extent4)
+Interface.RegisterAttribute("Rect", "PaddingLeft", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "PaddingTop", Interface.ExtentH)
+Interface.RegisterAttribute("Rect", "PaddingRight", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "PaddingBottom", Interface.ExtentH)
+
+Interface.RegisterAttribute("Rect", "Margin", Interface.Extent4)
+Interface.RegisterAttribute("Rect", "MarginLeft", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "MarginTop", Interface.ExtentH)
+Interface.RegisterAttribute("Rect", "MarginRight", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "MarginBottom", Interface.ExtentH)
+
+Interface.RegisterAttribute("Rect", "Radius", Interface.Extent4)
+Interface.RegisterAttribute("Rect", "TopLeftRadius", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "TopRightRadius", Interface.ExtentH)
+Interface.RegisterAttribute("Rect", "BottomLeftRadius", Interface.ExtentW)
+Interface.RegisterAttribute("Rect", "BottomRightRadius", Interface.ExtentH)
+
+Interface.RegisterAttribute("Rect", "Gap", Interface.ExtentW)

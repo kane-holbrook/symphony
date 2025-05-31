@@ -1,9 +1,10 @@
 AddCSLuaFile()
 if SERVER then return end
 local PANEL = xvgui.RegisterFromXML("Radio", [[
-    <Rect Ref="RadioButton`" Height="1.25ch" Flex="4" Hover="true" Cursor="hand" Checked="false" :Click="function (...)
+    <Rect Ref="RadioButton`" Height="1.25ch" Flex="4" Hover="true" Cursor="hand" Checked="false" :On:Click="function (...)
         self:Emit('Change:Value', true)
         self:InvalidateLayout()
+        return true
     end">
         <Rect Ref="Mid"
             Height="1ph"
