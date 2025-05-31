@@ -142,9 +142,7 @@ function Rect.Prototype:ParseNamespace(ns, name, value)
         setfenv(f, self.Cache)
 
         local key = self:GetId() .. ":" .. name
-        self.Hooked[name] = key
-
-        hook.Add(name, key, f())
+        self.Hooked[name] = { key = key, func = f() }
 
         return true
     elseif ns == "On" then        

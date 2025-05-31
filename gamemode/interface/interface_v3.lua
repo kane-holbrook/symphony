@@ -48,6 +48,7 @@ end
 include("2d_v3/fonts.lua")
 include("2d_v3/draw.lua")
 include("2d_v3/panel.lua")
+include("2d_v3/for.lua")
 include("2d_v3/label.lua")
 include("2d_v3/xml.lua")
 include("2d_v3/window.lua")

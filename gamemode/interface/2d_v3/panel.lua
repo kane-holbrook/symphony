@@ -506,7 +506,7 @@ function Rect.Prototype:SetProperty(name, value, noParse)
         if opt.Parse and not noParse then
             value = opt.Parse(self, name, value)
         elseif p.Type and not p.Options.NoValidate then
-            assert(value == nil or Type.Is(value, p.Type), "Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName())
+            assert(value == nil or Type.Is(value, p.Type), tostring(self) .. ": Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName())
         end
     end
 
@@ -601,7 +601,7 @@ function Rect.Prototype:RenderProperty(name, force)
     local value
     if f then 
         local succ, v = xpcall(f, function (msg)
-            ErrorNoHaltWithStack("Property " .. name .. " failed to render: " .. msg)
+            ErrorNoHaltWithStack(tostring(self) .. ": Property " .. name .. " failed to render: " .. msg)
         end, self)
         
         if not succ then
@@ -744,6 +744,12 @@ function Rect.Prototype:PerformLayout()
         root = true
     end
 
+    if not self.LastLayout then
+        for k, v in pairs(self.Hooked) do
+            hook.Add(k, v.key, v.func)
+        end
+    end
+
     self:RenderProperty("Display")
 
     local TypeOptions = self:GetType():GetOptions()
@@ -849,6 +855,7 @@ function Rect.Prototype:PerformLayout()
         Interface.LayoutMutex = nil
     end
 
+    self.LastLayout = engine.TickCount()
     self.LayoutScheduled = false
 
     return
@@ -1440,7 +1447,7 @@ function Rect.Prototype:Dispose()
     end
 
     for k, v in pairs(self.Hooked) do
-        hook.Remove(k, v)
+        hook.Remove(k, v.key)
     end
 
     for k, v in pairs(self:GetChildren()) do
