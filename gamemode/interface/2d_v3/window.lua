@@ -5,6 +5,7 @@ end
 
 local WINDOW = Interface.RegisterFromXML("Window", [[
     <Rect 
+        Absolute="true"
         X="25%" 
         Y="25%" 
         Width="50%" 
@@ -13,11 +14,11 @@ local WINDOW = Interface.RegisterFromXML("Window", [[
         FontFamily="Rajdhani"
         FontSize="8"
         :Material="RadialGradient(
-            Color(0, 3, 10, 254),
+            Color(0, 3, 10, 200),
             0.5,
-            Color(0, 14, 30, 254),
+            Color(0, 14, 30, 200),
             0.75,
-            Color(0, 3, 10, 254)
+            Color(0, 3, 10, 200)
         )" 
         Align="5" 
         Popup="true"
@@ -47,7 +48,7 @@ local WINDOW = Interface.RegisterFromXML("Window", [[
                 Flow="Y"
                 PaddingTop="7.5ss"
                 PaddingLeft="10ss"
-                PaddingRight="10ss"
+                PaddingRight="0"
                 PaddingBottom="7.5ss"
                 :Width="Parent.Width - ScreenScale(4)"
                 :Height="Parent.Height - ScreenScale(4)"
@@ -129,4 +130,5 @@ WINDOW:CreateProperty("CloseButton", Type.Boolean, { Default = true })
 
 function WINDOW.Prototype:OnClose()
     self:Dispose()
+    return true
 end
