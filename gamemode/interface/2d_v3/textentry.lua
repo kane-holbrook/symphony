@@ -8,9 +8,16 @@ local TEXTENTRY = Interface.RegisterFromXML("TextEntry", [[
         Align="4"
         Hover="true" 
         Cursor="beam" 
-        :Stroke="IsHovered and Color(255, 255, 255, 92) or Color(255, 255, 255, 64)" 
+        Stroke="Color(255, 255, 255, 16)"
         StrokeWidth="1" 
-        :Fill="IsHovered and Color(0, 0, 0, 192) or Color(0, 0, 0, 118)"
+        Fill="White"
+        :Material="RadialGradient(
+            Color(0, 14, 30, 254),
+            0.0,
+            Color(0, 14, 30, 254),
+            0.9,
+            Color(0, 3, 10, 254)
+        )" 
         
         :Shape="{
             0, 0,
@@ -25,6 +32,7 @@ local TEXTENTRY = Interface.RegisterFromXML("TextEntry", [[
     </Rect>
 ]])
 TEXTENTRY:CreateProperty("Value", Type.String, { Default = "" })
+TEXTENTRY:CreateProperty("Multiline", Type.Boolean, { Default = false })
 TEXTENTRY:CreateProperty("Placeholder", Type.String, { Default = "" })
 TEXTENTRY:CreateProperty("CursorColor", Type.Color, { Default = Color(182, 208, 216) })
 TEXTENTRY:CreateProperty("HighlightColor", Type.Color, { Default = Color(0, 110, 141) })
@@ -35,7 +43,7 @@ function TEXTENTRY.Prototype:Initialize()
 end
 
 function TEXTENTRY.Prototype:OnStartDisplay()
-    base(self, "OnRender")
+    base(self, "OnStartDisplay")
 
     self:GetPanel():DockPadding(ScreenScale(2), 0, ScreenScale(2), 0)
     self.TextEntry = vgui.Create("DTextEntry", self:GetPanel())
@@ -75,6 +83,7 @@ function TEXTENTRY.Prototype:OnMousePressed(button)
     if button == MOUSE_LEFT then
         self.TextEntry:RequestFocus()
     end
+    return true
 end
 
 function TEXTENTRY.Prototype:PerformLayout()
@@ -87,6 +96,7 @@ function TEXTENTRY.Prototype:PerformLayout()
         self.TextEntry:SetHighlightColor(self:GetHighlightColor())
         self.TextEntry:SetPlaceholderColor(self:GetPlaceholderColor())
         self.TextEntry:SetUpdateOnType(true)
+        self.TextEntry:SetMultiline(self:GetMultiline())
 
         self.TextEntry:SetPlaceholderText(self:GetPlaceholder())
 
