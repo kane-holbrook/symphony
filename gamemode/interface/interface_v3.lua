@@ -52,6 +52,7 @@ include("2d_v3/for.lua")
 include("2d_v3/label.lua")
 include("2d_v3/xml.lua")
 include("2d_v3/window.lua")
+include("2d_v3/textentry.lua")
 
 if not CLIENT then
     return
@@ -103,12 +104,11 @@ end
 -- Absolute:
 -- Flex
 
+-- Y, 9, PR=50 causes a 50 pixel PB?
 
 pan = Interface.CreateFromXML(nil, [[
-    <Window>
-        <For Debug:Global="ForLoop" Each="_, ply in pairs(tablex.SortByMemberEx(player.GetAll(), 'Name', true))" Width="100%" Hook:1Hz="function () self:InvalidateLayout() end">
-            <Text :Content="ply:Name()" />
-        </For>
+    <Window X="25%" Y="25%" Width="50%" Height="50%">
+        <TextEntry Name="TextEntry" Placeholder="Test" Width="50%" />
     </Window>
     
 ]])

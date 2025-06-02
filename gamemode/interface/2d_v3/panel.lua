@@ -148,7 +148,7 @@ function Interface.ExtentY(pnl, prop, value)
 end
 
 Rect = Type.Register("Rect", nil, {
-    VGUI = "DPanel"
+    VGUI = "EditablePanel"
 })
 
 Rect:CreateProperty("Panel")
@@ -376,7 +376,7 @@ end
 
 function Rect.Prototype:SetPadding(l, t, r, b)
     if isstring(l) and string.find(l, ",") then
-        t, l, r, b = unpack(string.Split(l, ","))
+        l, t, r, b = unpack(string.Split(l, ","))
     end
 
     self:SetPaddingLeft(l)
@@ -387,13 +387,17 @@ end
 
 function Rect.Prototype:SetMargin(l, t, r, b)
     if isstring(l) and string.find(l, ",") then
-        t, l, r, b = unpack(string.Split(l, ","))
+        l, t, r, b = unpack(string.Split(l, ","))
     end
 
     self:SetMarginLeft(l)
     self:SetMarginTop(t or l)
     self:SetMarginRight(r or l)
     self:SetMarginBottom(b or t or l)
+end
+
+function Rect.Prototype:GetFont()
+    return Interface.Font(self.Cache.FontFamily, self.Cache.FontSize, self.Cache.FontWeight)
 end
 
 local notex = Material("vgui/white")
@@ -431,8 +435,7 @@ function Rect.Prototype:Paint(w, h)
         surface.SetDrawColor(self:GetStroke())
         if poly then
             local s = self:GetShape()
-            local x, y = self:GetPos()
-            local cx, cy = x + w/2, y + h/2
+            local cx, cy = w/2, h/2
             local sx, sy = s[1], s[2]
             for i=1, #s, 2 do
                 local x1 = s[i]
@@ -446,7 +449,7 @@ function Rect.Prototype:Paint(w, h)
                 local addY2 = y2 < cy and 1 or -1
 
                 for l=1, strokeW do
-                    surface.DrawLine(x1 + l * addX, y1 + l * addY, x2 + l * addX2, y2 + l * addY2)
+                    surface.DrawLine(x1 + (l * addX), y1 + (l * addY), x2 + (l * addX2), y2 + (l * addY2), w, y)
                 end
             end
         else
@@ -733,6 +736,12 @@ function Rect.Prototype:GetCache(key)
     return self.Cache[key]
 end
 
+function Rect.Prototype:OnStartDisplay()
+end
+
+function Rect.Prototype:OnStopDisplay()
+end
+
 function Rect.Prototype:PerformLayout()
     if self:GetSuppressLayout() then
         return
@@ -807,8 +816,11 @@ function Rect.Prototype:PerformLayout()
             if self:GetPopup() then
                 pnl:MakePopup()
             end
+
+            self:OnStartDisplay()
         end
     elseif pnl and not isvisible then
+        self:OnStopDisplay()
         pnl:Remove()
         self:SetPanel(nil)
     end
@@ -1032,7 +1044,7 @@ function Rect.Prototype:CalculateBounds(force)
     local lw, lh = self:GetWidth(), self:GetHeight()
 
     local w, h = self:RenderProperty("Width"), self:RenderProperty("Height")
-    local pl, pr, pt, pb = self:RenderProperty("PaddingLeft") or 0, self:RenderProperty("PaddingRight") or 0, self:RenderProperty("PaddingTop") or 0, self:RenderProperty("PaddingBottom") or 0
+    local pl, pt, pr, pb = self:RenderProperty("PaddingLeft") or 0, self:RenderProperty("PaddingTop") or 0, self:RenderProperty("PaddingRight") or 0, self:RenderProperty("PaddingBottom") or 0
     local rerenderWidth, rerenderHeight
 
     -- Firstly, calculate bounds for all our children.
@@ -1087,11 +1099,11 @@ function Rect.Prototype:CalculateBounds(force)
         end
 
         if self:IsWidthAuto() then
-            w = ltr and tw + pt + pr or cw + pl + pr
+            w = ltr and tw + pl + pr or cw + pl + pr
         end
 
         if self:IsHeightAuto() then
-            h = ltr and ch + pt + pb or th + pl + pr
+            h = ltr and ch + pt + pb or th + pt + pb
         end
 
         if growElement then
