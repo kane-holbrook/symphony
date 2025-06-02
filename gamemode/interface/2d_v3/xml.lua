@@ -140,16 +140,20 @@ function Rect.Prototype:ParseNamespace(ns, name, value)
         end
 
         setfenv(f, self.Cache)
+      
+        if string.StartsWith(string.Trim(value), "function") then
+            f = f()
+        end
 
         local key = self:GetId() .. ":" .. name
-        self.Hooked[name] = { key = key, func = f() }
+        self.Hooked[name] = { key = key, func = f }
 
         return true
     elseif ns == "On" then        
         local f = CompileString("return " .. value, "", true)
         setfenv(f, self.Cache)
 
-        if string.StartsWith(value, "function") then
+        if string.StartsWith(string.Trim(value), "function") then
             f = f()
         end
 
