@@ -18,7 +18,7 @@ end
 function TEXT.Prototype:GetChildrenSize()
     self:RenderProperty("Content")
     
-    surface.SetFont(Interface.Font(self.Cache.FontFamily, self.Cache.FontSize, self.Cache.FontWeight))
+    surface.SetFont(self:GetFont())
     
     self.Lines = string.Split(self:GetContent(), "\n")
     for k, v in pairs(self.Lines) do
@@ -78,8 +78,8 @@ function TEXT.Prototype:Paint(w, h)
     base(self, "Paint", w, h)
 
     
-    surface.SetFont(Interface.Font(self.Cache.FontFamily, self.Cache.FontSize, self.Cache.FontWeight))
-    surface.SetTextColor(self.Cache.FontColor, self.Cache.FontAdditive)
+    surface.SetFont(self:GetFont())
+    surface.SetTextColor(self.Cache.FontColor)
     local y = 0
 
 
