@@ -234,6 +234,10 @@ Rect:CreateProperty("SuppressLayout", Type.Boolean, {
     Default = false
 })
 
+Rect:CreateProperty("ParentShouldIgnoreSize", Type.Boolean, {
+    Default = false
+})
+
 Rect:CreateProperty("Align", Type.Number, { Manual = true, Default = 7, Parse = function (pnl, prop, value)
     if isstring(value) and value == "false" then
         return nil
@@ -314,7 +318,7 @@ Rect:CreateProperty("Static", Type.Boolean, {
     Default = false
 })
 
-Rect:CreateProperty("Shape", Type.Table, { Manual = true })
+Rect:CreateProperty("Shape", Type.Any, { Manual = true })
 
 Rect:CreateProperty("Cursor", Type.String, { 
     Set = function (pan, name, value)
@@ -323,7 +327,6 @@ Rect:CreateProperty("Cursor", Type.String, {
     end
 })
 Rect:CreateProperty("Popup", Type.Boolean, { Manual = true })
-
 
 function Rect.Prototype:GetPadding()
     return self:GetPaddingLeft(), self:GetPaddingTop(), self:GetPaddingRight(), self:GetPaddingBottom()
@@ -435,6 +438,10 @@ function Rect.Prototype:Paint(w, h)
         surface.SetDrawColor(self:GetStroke())
         if poly then
             local s = self:GetShape()
+            if isfunction(s) then
+                s = s(self, w, h)
+            end
+
             local cx, cy = w/2, h/2
             local sx, sy = s[1], s[2]
             for i=1, #s, 2 do
@@ -565,6 +572,17 @@ function Rect.Prototype:Emit(event, ...)
     return false
 end
 
+function Rect.Prototype:EmitParent(event, ...)
+    local p = self:GetParent()
+    while p do
+        if p:OnReceive(self, event, ...) then 
+            return true 
+        end
+        p = p:GetParent()
+    end
+    return false
+end
+
 function Rect.Prototype:OnReceive(source, event, ...)
     if event == "CursorEntered" then
         if self:OnCursorEntered(source) then
@@ -659,7 +677,7 @@ end
 
 function Rect.Prototype:OnPropertyChanged(name, value, old)
     if self:GetDebug() or self.DebugProperties[name] then
-        local st = debug.getinfo(3, "Sl")
+        local st = debug.getinfo(4, "Sl")
         print(self, "OnPropertyChanged", name, value, old, st.short_src, st.currentline)
     end
 
@@ -829,7 +847,12 @@ function Rect.Prototype:PerformLayout()
 
     -- Now the shape
     local shape = self:RenderProperty("Shape")
+    if isfunction(shape) then
+        shape = shape(self, w, h)
+    end
+
     if shape then
+        
         local poly = {
         }
         
@@ -883,7 +906,7 @@ end
 
 function Rect.Prototype:OnCursorEntered(src)
     
-    if self:GetDebug() or self.DebugProperties[name] then
+    if self:GetDebug() then
         print(self, "CursorEntered", src)
     end
 
@@ -891,7 +914,7 @@ function Rect.Prototype:OnCursorEntered(src)
         self:SetIsHovered(true)
         self:InvalidateLayout(true)
 
-        if self:GetDebug() or self.DebugProperties[name] then
+        if self:GetDebug() then
             print(self, "CursorEntered", src)
         end
         return true
@@ -1010,7 +1033,7 @@ function Rect.Prototype:GetChildrenSize()
     local w, h = 0, 0
 
     for k, v in pairs(self:GetChildren()) do
-        if v:GetDisplay() then
+        if v:GetDisplay() and not v:GetParentShouldIgnoreSize() then
             x = math.max(x, v:GetX())
             y = math.max(y, v:GetY())
             w = math.max(w, v:GetX() + v:GetWidth())
@@ -1049,7 +1072,7 @@ function Rect.Prototype:CalculateBounds(force)
 
     -- Firstly, calculate bounds for all our children.
     for k, v in pairs(self:GetChildren()) do
-        if v:GetDisplay() then
+        if v:GetDisplay() and not (v:IsWidthFill() or v:IsHeightFill()) then
             v:CalculateBounds()
         end
     end
@@ -1111,7 +1134,7 @@ function Rect.Prototype:CalculateBounds(force)
                 local sz = w - tw - pl - pr - (gap * (numNonGrowElements - 1))
 
                 growElement.Width = sz
-                growElement:RenderProperty("Width")
+                growElement:CalculateBounds()
 
                 local vw = sz + growElement:GetMarginLeft() + growElement:GetMarginRight()
                 cw = math.max(cw, vw)
@@ -1120,7 +1143,7 @@ function Rect.Prototype:CalculateBounds(force)
                 local sz = h - th - pt - pb - (gap * (numNonGrowElements - 1))
 
                 growElement.Height = sz
-                growElement:RenderProperty("Height")
+                growElement:CalculateBounds()
 
                 local vh = sz + growElement:GetMarginTop() + growElement:GetMarginBottom()
                 ch = math.max(ch, vh)
