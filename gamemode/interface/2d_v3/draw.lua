@@ -3,9 +3,34 @@ if SERVER then
     return
 end
 
+local dp = 3
+function CirclePoly(pnl, w, h, sides)
+    sides = sides or 32
+
+    local shape = {}
+    local idx = 1
+
+    local r = math.min(w, h) / 2
+    local cx = w/2
+    local cy = h/2
+
+    local pheta = 360 / sides
+
+    for i=1, sides do
+        local angle = math.rad(pheta * i)
+        local x = cx + (math.cos(angle) * r)
+        local y = cy + (math.sin(angle) * r)
+
+        shape[idx] = x
+        shape[idx + 1] =  y
+        idx = idx + 2
+    end
+
+    return shape
+end
+
 
 local Radial = Material("symphony/ui/radialgradient")
-local dp = 3
 function RadialGradient(color1, offset1, color2, offset2, color3)
     return function (pnl, w, h) 
         Radial:SetFloat("$c0_x", math.Round(color1.r / 255, dp))
