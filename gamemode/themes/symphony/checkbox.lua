@@ -49,7 +49,6 @@ function Checkbox.Prototype:GenerateBackground()
 end
 
 function Checkbox.Prototype:PerformLayout()
-    base(self, "PerformLayout")
 
     if not self:GetValue() then
         local children = self:GetChildren()
@@ -60,4 +59,6 @@ function Checkbox.Prototype:PerformLayout()
 
         self:SetValue(child:GetText())
     end
+    
+    base(self, "PerformLayout")
 end

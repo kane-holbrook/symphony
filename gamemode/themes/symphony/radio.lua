@@ -55,7 +55,6 @@ function Radio.Prototype:GenerateBackground()
 end
 
 function Radio.Prototype:PerformLayout()
-    base(self, "PerformLayout")
 
     if not self:GetValue() then
         local children = self:GetChildren()
@@ -66,4 +65,6 @@ function Radio.Prototype:PerformLayout()
 
         self:SetValue(child:GetText())
     end
+    
+    base(self, "PerformLayout")
 end
