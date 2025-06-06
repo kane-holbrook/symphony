@@ -3,7 +3,7 @@ if SERVER then
     return 
 end
 local Radio = Theme.Symphony:RegisterFromXML("Radio", [[
-    <Rect Align="7" Flow="X" Hover="true" Cursor="hand" :Checked="Parent.Value and Parent.Value == self:GetValue()" On:MousePressed="function (src)
+    <Rect Align="7" Flow="X" Hover="true" Cursor="hand" :Checked="Parent.Value == self:GetValue()" On:MousePressed="function (src)
         if src ~= self then
             self:EmitParent('MousePressed') -- Re-emit from ourself
         end
@@ -18,7 +18,7 @@ local Radio = Theme.Symphony:RegisterFromXML("Radio", [[
             StrokeWidth="1"
             :Stroke="IsHovered and _G.Color(255, 255, 255, 32) or _G.Color(255, 255, 255, 16)"
             MarginRight="3cw"
-            :Shape="function (pnl, w, h) return CirclePoly(pnl, w, h, 32) end"
+            :Shape="function (pnl, w, h) return CirclePoly(pnl, w, h, 12) end"
         >
             <Rect 
                 Width="0.5ch"
@@ -27,7 +27,7 @@ local Radio = Theme.Symphony:RegisterFromXML("Radio", [[
                 StrokeWidth="1"
                 Stroke="Color(255, 255, 255, 16)"
                 :Display="Checked == true"
-                :Shape="function (pnl, w, h) return CirclePoly(pnl, w, h, 32) end"
+                :Shape="function (pnl, w, h) return CirclePoly(pnl, w, h, 12) end"
             />
         </Rect>
         
@@ -65,6 +65,6 @@ function Radio.Prototype:PerformLayout()
 
         self:SetValue(child:GetText())
     end
-    
+
     base(self, "PerformLayout")
 end

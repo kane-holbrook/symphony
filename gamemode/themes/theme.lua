@@ -121,7 +121,17 @@ pan = Theme.Default:CreateFromXML(nil, [[
                     </For>
                 </Picklist>
                 <Slider Value="0.5" />
-                <Checkbox>Test</Checkbox>
+                <Rect Init:Value="{ ABC = true, DEF = true }" On:MousePressed="function (src)
+                    local val = src.Value
+                    if val then
+                        self.Value[val] = not self.Value[val]
+                        self:InvalidateLayout()
+                        return true
+                    end
+                end" Gap="10ss">
+                    <Checkbox Propagate="true" Value="ABC">ABC</Checkbox>
+                    <Checkbox Propagate="true" Value="DEF">DEF</Checkbox>
+                </Rect>
 
                 <Rect Flow="Y" Gap="0.3ch" Init:Value="'Test3'" On:MousePressed="function (src)
                     if src:GetProperty('Value') then

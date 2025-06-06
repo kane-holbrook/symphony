@@ -2,14 +2,18 @@ AddCSLuaFile()
 if SERVER then 
     return 
 end
-local Checkbox = Theme.Default:RegisterFromXML("Checkbox", [[
+local Checkbox = Theme.Symphony:RegisterFromXML("Checkbox", [[
     <Rect Align="7" Flow="X" Hover="true" Cursor="hand" 
+        :Checked="self.Propagate and istable(Parent.Value) and Parent.Value[self:GetValue()] or Parent.Value == self:GetValue()"
         On:MousePressed="function (src)
             if not self.Propagate then
+                self:SetPropertyComputed('Checked', nil)
                 self:SetChecked(not self:GetChecked())
                 self:InvalidateLayout()
-                return true
+            else
+                self:EmitParent('MousePressed')
             end
+            return true
         end">
         <Rect 
             Width="1ch"
@@ -30,6 +34,8 @@ Checkbox:CreateProperty("Color", Type.Color, { Default = Color(15, 2, 21, 254) }
 Checkbox:CreateProperty("Value", Type.Bool, { Default = false })
 Checkbox:CreateProperty("Checked", Type.Bool)
 Checkbox:CreateProperty("Propagate", Type.Bool, { Default = false })
+
+
 
 function Checkbox.Prototype:GenerateBackground()
     local col = self:GetColor()
@@ -59,6 +65,6 @@ function Checkbox.Prototype:PerformLayout()
 
         self:SetValue(child:GetText())
     end
-    
+
     base(self, "PerformLayout")
 end

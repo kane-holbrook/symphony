@@ -3,7 +3,7 @@ if SERVER then
     return
 end
 
-local For = Theme.Default:Register("For")
+local For = Theme.Symphony:Register("For")
 For:CreateProperty("Each", Type.String, {
     Parse = function(pnl, name, value)
         local splitted = string.Split(value, " in ")

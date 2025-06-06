@@ -2,7 +2,7 @@ AddCSLuaFile()
 if SERVER then 
     return 
 end
-local Checkbox = Theme.Default:RegisterFromXML("Checkbox", [[
+local Checkbox = Theme.Symphony:RegisterFromXML("Checkbox", [[
     <Rect Align="7" Flow="X" Hover="true" Cursor="hand" 
         On:MousePressed="function (src)
             if not self.Propagate then
@@ -30,6 +30,9 @@ Checkbox:CreateProperty("Color", Type.Color, { Default = Color(0, 14, 30, 254) }
 Checkbox:CreateProperty("Value", Type.Bool, { Default = false })
 Checkbox:CreateProperty("Checked", Type.Bool)
 Checkbox:CreateProperty("Propagate", Type.Bool, { Default = false })
+
+function CheckboxHandler()
+end
 
 function Checkbox.Prototype:GenerateBackground()
     local col = self:GetColor()

@@ -3,7 +3,7 @@ if SERVER then
     return
 end
 
-local Popover = Theme.Default:Register("Popover", Rect)
+local Popover = Theme.Symphony:Register("Popover", Rect)
 Popover:CreateProperty("FollowCursor", Type.Boolean, { Default = false })
 Popover:CreateProperty("OffsetX", Type.Number, { Default = 0, Parse = Interface.ExtentX })
 Popover:CreateProperty("OffsetY", Type.Number, { Default = 0, Parse = Interface.ExtentY })

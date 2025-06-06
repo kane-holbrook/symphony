@@ -3,7 +3,7 @@ if SERVER then
     return
 end
 
-local WINDOW = Theme.Default:RegisterFromXML("Window", [[
+local WINDOW = Theme.Symphony:RegisterFromXML("Window", [[
     <Rect 
         Absolute="true"
         X="25%" 

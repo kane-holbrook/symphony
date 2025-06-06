@@ -91,7 +91,7 @@ function Rect.Prototype:ParseAttribute(name, value)
                 f(self, value)
                 return true
             end
-        else
+        elseif pm.Type then
             local v2 = pm.Type:Parse(value)
             if v2 ~= nil then
                 value = v2
