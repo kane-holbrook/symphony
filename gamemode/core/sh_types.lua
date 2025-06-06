@@ -56,7 +56,7 @@ do
 
 	function TYPE:Apply(t, id)
 		local mt = table.Copy(self.Metamethods)
-		mt.Id = id or uuid()
+		mt.Id = id or (string.format("%08x", self.Code) .. string.sub(uuid(), 9, -1))
 		mt.Type = self
 		local super = self:GetSuper()
 		mt.Base = super.Prototype
@@ -203,7 +203,7 @@ do
 		for k, v in pairs(self.PropertiesByName) do
 			props[k] = v
 		end
-		
+
 		return props
 	end
 
@@ -705,6 +705,12 @@ do
 	-- @test Type.Register
 	function Type.GetByName(name)
 		return Type.ByName[name]
+	end
+
+	function Type.GetById(id)
+		assert(id, "Must provide an ID to Type.GetById")
+		local code = string.sub(id, 1, 8)
+		return Type.ByCode[tonumber(code, 16)]
 	end
 
 	-- @test Type.Register

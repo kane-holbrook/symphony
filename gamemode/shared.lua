@@ -79,6 +79,7 @@ IncludeEx("lib/uuid.lua", Realm.Shared)
 IncludeEx("lib/materialex.lua", Realm.Shared)
 IncludeEx("lib/drawex.lua", Realm.Shared)
 IncludeEx("lib/xvgui/xvgui.lua", Realm.Shared)
+polyline = IncludeEx("lib/polyline.lua", Realm.Shared)
 xml2lua = IncludeEx("lib/xml2lua/xml2lua.lua", Realm.Shared)
 neonate = IncludeEx("lib/neonate.lua", Realm.Shared)
 Circles = IncludeEx("lib/circles.lua", Realm.Shared)
@@ -97,7 +98,8 @@ IncludeEx("types/framework/datetime.lua", Realm.Shared)
 IncludeEx("core/sv_database.lua", Realm.Server)
 IncludeEx("core/sh_tests.lua", Realm.Shared)
 
-IncludeEx("interface/interface_v3.lua", Realm.Shared)
+IncludeEx("themes/theme.lua", Realm.Shared)
+IncludeEx("views/menubar.lua", Realm.Shared)
 
 --IncludeEx("views/setup/shared.lua", Realm.Shared)
 --IncludeEx("interface/interface_v2.lua", Realm.Shared)
@@ -115,7 +117,6 @@ IncludeEx("derma/colorpicker.lua", Realm.Shared)--]]
 
 --IncludeEx("views/intro/intro.lua", Realm.Shared) --]]
 --IncludeEx("views/settings/settings.lua", Realm.Shared)
-
 
 
 
