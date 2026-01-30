@@ -1,51 +1,80 @@
 AddCSLuaFile()
 
---[[
-require("lanes")
+RPC = {}
+RPC.Receivers = {}
+RPC.Promises = {}
 
--- Create two independent lindas
-main_to_worker = lanes.linda()
-worker_to_main = lanes.linda()
+function RPC.Register(name, func)
+    RPC.Receivers[name] = func
+end
 
--- Worker lane
-local worker = lanes.gen("*", {
-    globals = {
-        in_linda = main_to_worker,
-        out_linda = worker_to_main
-    }
-}, function()
-    while true do
-        local _, msg = in_linda:receive(nil, "work")
-        if msg == "stop" then
-            out_linda:send("log", "Worker stopping.")
-            break
+if CLIENT then
+    function RPC.Call(name, ...)
+        local p = Promise.Create()
+
+        rtc.Start("RPC:Call")
+            rtc.WriteString(p:GetId())
+            rtc.WriteString(name)
+            rtc.WriteObject({...})
+        rtc.SendToServer()
+        RPC.Promises[p:GetId()] = p
+        return p
+    end
+else
+    local ply = FindMetaTable("Player")
+    function ply:RPC(name, ...)
+        local p = Promise.Create()
+        p.Player = self
+
+        rtc.Start("RPC:Call")
+            rtc.WriteString(p:GetId())
+            rtc.WriteString(name)
+            rtc.WriteObject({...})
+        rtc.Send(self)
+        RPC.Promises[p:GetId()] = p
+        return p
+    end
+end
+
+rtc.Receive("RPC:Call", function (len, ply)
+    local id = rtc.ReadString()
+    local name = rtc.ReadString()
+    local args = rtc.ReadObject()
+    
+    local func = RPC.Receivers[name]
+    assert(func, "No RPC function registered with name '" .. name .. "' (" .. tostring(ply) .. ")")
+    if func then
+        Promise.Run(function ()
+            local results = { func(ply, unpack(args)) }      
+            rtc.Start("RPC:Return")
+                rtc.WriteString(id)
+                rtc.WriteObject(results)
+
+            if SERVER then
+                rtc.Send(ply)
+            else
+                rtc.SendToServer()
+            end
+        end)
+    end
+end)
+
+rtc.Receive("RPC:Return", function (len, ply)
+    local id = rtc.ReadString()
+    local results = rtc.ReadObject()
+
+    local p = RPC.Promises[id]
+    assert(p, "No RPC promise with ID '" .. id .. "' (" .. tostring(ply) .. ")")
+    if p then
+        if SERVER then 
+            assert(p.Player == ply, "RPC promise player mismatch (" .. tostring(ply) .. ")")
         end
 
-        local result = msg * 2
-        out_linda:send("result", result)
+        RPC.Promises[id] = nil
+        p:Complete(unpack(results))
     end
 end)
 
--- Start worker lane
-worker()
-
--- Send a task
-main_to_worker:send("work", 21)
-
--- Poll result
-hook.Add("Think", "PollWorkerResult", function()
-    local _, result = worker_to_main:receive(0, "result")
-    if result then
-        print("Got result from lane:", result)
-
-        -- Tell the lane to stop
-        main_to_worker:send("work", "stop")
-    end
-
-    local _, log = worker_to_main:receive(0, "log")
-    if log then
-        print("Log:", log)
-        hook.Remove("Think", "PollWorkerResult")
-    end
+RPC.Register("Ping", function (ply)
+    return "Pong", 32
 end)
---]]

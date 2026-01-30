@@ -100,3 +100,33 @@ function immutable(t)
     mt.__newindex = immuteError
     setmetatable(t, mt)
 end
+
+function http.FetchAsync(url, headers)
+    local p = Promise.Create()
+    http.Fetch(url, function (...)
+        p:Complete(...)
+    end, function (err)
+        p:ThrowError(err)
+    end, headers)
+    return p
+end
+
+function ModelString(path)
+	return unpack(string.Split(path, "?"))
+end
+
+function Deref(t, ...)
+    for k, v in pairs({...}) do
+        if not t then
+            return nil
+        end
+
+        local n = t[v]
+        if isfunction(n) then
+            n = n(t)
+        end
+        t = n
+    end
+    return t
+end
+

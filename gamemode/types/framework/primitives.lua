@@ -284,27 +284,6 @@ PopulateMetaTable(FindMetaTable("IMaterial"), MATERIAL)
 
 
 
-local CALLABLE = Type.Register("Callable")
-CALLABLE:CreateProperty("Function")
-
-function CALLABLE.Metamethods:__call(...)
-    return self:GetFunction()(...)
-end
-
-function CALLABLE.Metamethods:__tostring()
-    return "Callable[" .. tostring(self:GetFunction()) .. "]"
-end
-
-function wrapfunc(f)
-    if istable(f) then
-        return f
-    end
-
-    local c = Type.New(CALLABLE)
-    c:SetFunction(f)
-    return c
-end
-
 function iscallable(obj)
     if isfunction(obj) then
         return true

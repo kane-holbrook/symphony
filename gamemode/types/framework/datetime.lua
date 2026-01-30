@@ -31,7 +31,7 @@ do
 	}
 
 	-- Define the DT class
-	local DT = Type.Register("DateTime")
+	local DT = Type.Register("DateTime", nil, { DatabaseType = "BIGINT" })
 	DT:CreateProperty("UnixTime", Type.Number)
 	
 	function DT.Metamethods:__tostring()
@@ -133,9 +133,28 @@ do
 		return self:GetProperty("UnixTime") == x.timestamp
 	end
 
-	function DT.Prototype:__serialize()
-		return self:GetProperty("UnixTime")
+	function DT:DatabaseEncode(value)
+		return value:GetUnixTime()
 	end
+
+	function DT:DatabaseDecode(value)
+		local dt = Type.New(DT)
+		dt:SetUnixTime(value)
+		
+		return dt
+	end
+
+	
+	function DT:Serialize(obj, ply)
+		return { obj:GetUnixTime() }
+	end
+
+	function DT:Deserialize(obj)
+		local dt = Type.New(DT)
+		dt:SetUnixTime(obj[1])
+		return dt
+	end
+
 
 	function DateTime(timestamp)
 		local dt = Type.New(DT)

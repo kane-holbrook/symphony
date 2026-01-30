@@ -3,7 +3,7 @@ Type.ByName = {} -- @test Type.Register
 Type.ByCode = weaktable(false, true) -- @test Type.Register
 Type.Instances = weaktable(false, true) -- @test Type.Register
 Type.Primitives = weaktable(false, true)
-
+Types = Type
 setmetatable(Type, { __index = Type.ByName })
 
 
@@ -40,7 +40,6 @@ local function CopyMetamethods(from, to)
 	end
 end
 
-
 -- Base Type
 local TYPE = Type.Type or {}
 do
@@ -49,43 +48,44 @@ do
 	TYPE.Super = nil
 
 	function TYPE:New(id)
-		local t = {}
-		self:Apply(t, id)
-		return t
-	end
+		local t = id and Type.Instances[id]
+		if t then
+			return t
+		else
+			t = {}
 
-	function TYPE:Apply(t, id)
-		local mt = table.Copy(self.Metamethods)
-		mt.Id = id or (string.format("%08x", self.Code) .. string.sub(uuid(), 9, -1))
-		mt.Type = self
-		local super = self:GetSuper()
-		mt.Base = super.Prototype
-		mt.__index = mt -- The object should point at this metatable (so the object itself can remain clean).
-		setmetatable(mt, {
-			__index = self.Prototype -- However, if keys aren't found on the MT, they should be pulled from the proto.
-		})
+			local mt = table.Copy(self.Metamethods)
+			mt.Id = id or (string.format("%08x", self.Code) .. string.sub(uuid(), 9, -1))
+			mt.Type = self
+			local super = self:GetSuper()
+			mt.Base = super.Prototype
+			mt.__index = mt -- The object should point at this metatable (so the object itself can remain clean).
+			setmetatable(mt, {
+				__index = self.Prototype -- However, if keys aren't found on the MT, they should be pulled from the proto.
+			})
 
-		setmetatable(t, mt)
-		table.insert(self.Instances, t)
+			setmetatable(t, mt)
+			self.Instances[mt.Id] = t
 
-		for k, v in pairs(self:GetPropertiesMap()) do
-			local default = v.Options.Default
-			if default == nil then
-				continue
+			for k, v in pairs(self:GetPropertiesMap()) do
+				local default = v.Options.Default
+				if default == nil then
+					continue
+				end
+
+				if isfunction(default) then
+					t[k] = default(t)
+				elseif istable(default) then
+					t[k] = table.Copy(default)
+				else
+					t[k] = default
+				end
 			end
 
-			if isfunction(default) then
-				t[k] = default(t)
-			elseif istable(default) then
-				t[k] = table.Copy(default)
-			else
-				t[k] = default
-			end
+			Type.Instances[t:GetId()] = t
+
+			t:Initialize()
 		end
-
-		Type.Instances[t:GetId()] = t
-
-		t:Initialize()
 		return t
 	end
 
@@ -125,13 +125,17 @@ do
 	TYPE.Properties = {} -- @test Type.Register
 	TYPE.PropertiesByName = weaktable(false, true) -- Effectively a cache. -- @test Type.Register
 
+	local ReservedNames = {
+		Type = true
+	}
 	-- @test Type.Register
 	function TYPE:CreateProperty(name, type, options)
 		options = options or {}
+		assert(not ReservedNames[name], "Cannot create property with reserved name: " .. name)
 
-		if self.PropertiesByName[name] then
+		if rawget(self.PropertiesByName, name) then
 			local prop = self.PropertiesByName[name]
-			prop.Type = prop
+			prop.Type = type
 			prop.Options = options
 			if options.Priority then
 				table.SortByMember(self.Properties, "Priority")
@@ -239,6 +243,10 @@ do
 		return self.Instances
 	end
 
+	function TYPE:GetById(id)
+		return self.Instances[id]
+	end
+
 	-- @test Type.Register
 	function TYPE:GetInstanceCount()
 		return self.InstanceCount
@@ -271,6 +279,7 @@ do
 		for k, v in pairs(data) do
 			obj:SetProperty(k, v)
 		end
+
 		return obj
 	end
 
@@ -308,7 +317,7 @@ do
 				local i = {}
 				local fname = f.Name
 				i[1] = "`" .. Database.Escape(fname) .. "`"
-				i[2] = Database.Escape(f.Type:GetOptions().DatabaseType)
+				i[2] = opt.DatabaseType or Database.Escape(f.Type:GetOptions().DatabaseType)
 
 				if opt.not_null then
 					table.insert(i, "NOT NULL")
@@ -385,6 +394,8 @@ do
 
 	function TYPE:Select(field, value)
 
+		local promise = Promise.Create()
+
 		if not value then
 			value = field
 			field = self:GetDatabaseKey()
@@ -398,28 +409,32 @@ do
 			qry = "SELECT * FROM `" .. Database.Escape(self:GetDatabaseTable()) .. "`"
 		end
 
-		local data = Database.Query(qry):Await()
-		local out = {}
+		promise.Query = Database.Query(qry)
+		promise.Query:Then(function (data)
+			local out = {}
 
+			for i, r in pairs(data) do
+				local obj = new(self, r["Id"])
+			
+				local props = self:GetPropertiesMap()
+				for k, v in pairs(r) do
+					local p = props[k]
+					if not p then
+						continue
+					end
 
-		for k, v in pairs(data) do
-			local obj = new(self, v["Id"])
-		
-			local props = self:GetPropertiesMap()
-			for k, v in pairs(data[1]) do
-				local p = props[k]
-				if not p then
-					continue
+					obj:SetProperty(k, p.Type:DatabaseDecode(v))
 				end
+				getmetatable(obj).LastRefresh = CurTime()
 
-				obj:SetProperty(k, p.Type:DatabaseDecode(v))
+				out[i] = obj
 			end
-			getmetatable(obj).LastRefresh = CurTime()
 
-			out[k] = obj
-		end
+			
+			promise:Complete(out)
+		end)
 
-		return out
+		return promise
 	end
 
 	-- Registering us
@@ -448,7 +463,7 @@ do
 		
 		assert(self and self.GetBase, "base() called without self", 2)
 		assert(name, "base() called without a name", 2)
-
+ 
 		local top = false
 
 		-- If we're calling it for the first time, we're the bottom-most object.
@@ -457,7 +472,7 @@ do
 			base__Depth = base__Depth + 1
 			local p = self
 			while p do
-
+					
 				local mt = getmetatable(p)
 				assert(mt)
 
@@ -490,12 +505,14 @@ do
 
 		local out = {}
 		if base__Next and base__Next[base__Name] then
+			local last = this
 			this = base__Next
 			base__Depth = base__Depth + 1
 			out = { base__Next[name](src, ...) }
 			base__Depth = base__Depth - 1
 			base__Source = src
 			base__Name = name
+			this = last
 		end
 
 		if top then
@@ -515,6 +532,14 @@ do
 		return mt.Id
 	end
 
+	function OBJ:GetTableId()
+		local mt = getmetatable(self)
+		setmetatable(self, nil)
+		local id = tostring(self)
+		setmetatable(self, mt)
+		return id
+	end
+
 	-- @test Type.New
 	function OBJ:GetType()
 		local mt = getmetatable(self)
@@ -527,11 +552,21 @@ do
 		return self.Base
 	end
 
-	function OBJ:SetProperty(name, value)
+	function OBJ:SetProperty(name, value, noParse)
 		local p = Type.GetType(self):GetPropertiesMap()[name]
-		if p and p.Type and not p.Options.NoValidate then
-			assert(value == nil or Type.Is(value, p.Type), "Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName())
-		end
+
+		if p then
+			local opt = p.Options
+			if opt then
+				if opt.Parse and not noParse then
+					value = opt.Parse(self, name, value)
+				end
+			end
+
+			if p.Type then
+				assert(value == nil or Type.Is(value, p.Type), tostring(self) .. ": Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName())
+			end
+        end
 
 		local old = self[name]
 		self[name] = value
@@ -582,7 +617,12 @@ do
 		end)
 	end
 
-	function OBJ:Commit()
+	function OBJ:Commit(immediate)
+		if not immediate then
+			debounce(self:GetId() .. "Commit", function ()
+				self:Commit(true)
+			end, 1)
+		end
 
 		if not self:GetLastRefresh() then
 			-- Insert
@@ -621,29 +661,44 @@ do
 
 			return Database.Query(qry)
 		end
+		
+		function OBJ:DeleteFromDatabase()
+			assert(self:GetLastRefresh())
+			
+			local mt = getmetatable(self)
+			local key = self:GetType():GetDatabaseKey()
+			local id = self[key]
+			
+			local qry = "DELETE FROM `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(key) .. "` = " .. Type.GetType(id):DatabaseEncode(id)
+			mt.LastRefresh = nil
+			return Database.Query(qry)
+		end
 	end
-
-	function OBJ:DeleteFromDatabase()
-		assert(self:GetLastRefresh())
-
-		local mt = getmetatable(self)
-		local key = self:GetType():GetDatabaseKey()
-		local id = self[key]
-
-		local qry = "DELETE FROM `" .. Database.Escape(self:GetType():GetDatabaseTable()) .. "` WHERE `" .. Database.Escape(key) .. "` = " .. Type.GetType(id):DatabaseEncode(id)
-		mt.LastRefresh = nil
-		return Database.Query(qry)
-	end
-
+		
 	function OBJ:IsValid()
 		return not self.Disposed
 	end
 
 	function OBJ:Dispose()
-		Type.Instances[self:GetId()] = nil
-		self:GetType().Instances[self:GetId()] = nil
+		local id = self:GetId()
+		Type.Instances[id] = nil
+
+		self:GetType().Instances[id] = nil
 		self:GetType().InstanceCount = self:GetType().InstanceCount - 1
+		
 		self.Disposed = true
+	end
+
+	if SERVER then
+		util.AddNetworkString("Types.Dispose")
+	else
+		rtc.Receive("Types.Dispose", function(len)
+			local id = rtc.ReadString()
+			local obj = Type.Instances[id]
+			if obj then
+				obj:Dispose()
+			end
+		end)
 	end
 end
 
@@ -657,12 +712,13 @@ do
 		local t = Type.ByName[name]
 		if not t then
 			t = {}
-			t.Code = options.Code or (256 + util.CRC(name)) -- This is the unique int32 code used in networking etc.
+			t.Code = rawget(options, "Code") or (256 + util.CRC(name)) -- This is the unique int32 code used in networking etc.
 			assert(not Type.ByCode[t.Code], "Type code collision: " .. name)
 		end
 
 		t.Name = name
 		t.Super = super
+
 		t.Properties = setmetatable({}, { __index = super.Properties })
 		t.PropertiesByName = setmetatable({}, { __index = super.PropertiesByName })
 		t.Prototype = setmetatable({}, { __index = super.Prototype, Type = t, Super = super, Base = super.Prototype })
@@ -676,7 +732,7 @@ do
 		-- Effectively a cache of ancestors for speeding up Type.Is
 		t.Ancestry = {}
 		for k, v in pairs(super.Ancestry) do
-			t.Ancestry[v] = true
+			t.Ancestry[k] = true
 		end
 		t.Ancestry[super] = true
 
@@ -711,6 +767,10 @@ do
 		assert(id, "Must provide an ID to Type.GetById")
 		local code = string.sub(id, 1, 8)
 		return Type.ByCode[tonumber(code, 16)]
+	end
+
+	function Type.GetInstanceById(id)
+		return Type.Instances[id]
 	end
 
 	-- @test Type.Register
@@ -756,7 +816,7 @@ do
 	end
 	new = Type.New
 
-	function Type.Serialize(data, ply, root)
+	function Type.Serialize(data, root)
 		-- Effectively this just parses data, calling encode where necessary on objects, which call this
 		-- recursively.
 
@@ -766,9 +826,16 @@ do
 			root.map = {}
 			root.items = {}
 			root.num = 0
-			root.firstType, root.first = Type.Serialize(data, ply, root)
+			root.firstType, root.first = Type.Serialize(data, root)
+			
+			root[1] = root.firstType
+			root[2] = root.first
+			root[3] = root.items
 			root.map = nil
 			root.num = nil
+			root.firstType = nil
+			root.first = nil
+			root.items = nil
 
 			return root
 		end
@@ -788,7 +855,7 @@ do
 			root.num = id
 
 			for k, v in pairs(tp:Serialize(data)) do
-				t[k] = { Type.Serialize(v, ply, root) }
+				t[k] = { Type.Serialize(v, root) }
 			end
 
 			if data.GetId then
@@ -807,19 +874,19 @@ do
 		if not root then
 			root = {}
 			root.map = {}
-			root.items = data.items
-			root.first = data.first
-			root.firstType = data.firstType
+			root.items = data[3]
+			root.first = data[2]
+			root.firstType = data[1]
 			root.seen = {}
 
 			return Type.Deserialize({root.firstType, root.first}, root)
 		else
-			Test.Assert(data, "Data is nil", 2)
-			local typeId = data[1]
+			assert(data, "Data is nil", 2)
+			local typeId = tonumber(data[1])
 			local value = data[2]
 
 			local type = Type.GetByCode(typeId)
-			Test.Assert(type, "Type not found for code: " .. typeId)
+			assert(type, "Type not found for code: " .. tostring(typeId))
 
 			if Is(type, Type.Primitive) then
 				return type:Deserialize(value)
@@ -853,12 +920,22 @@ do
 		end
 	end
 
-	function net.WriteObject(obj, ply)
-		net.WriteTable(Type.Serialize(obj, ply))
+	function net.WriteObject(obj)
+		net.WriteTable(Type.Serialize(obj))
 	end
 
 	function net.ReadObject()
 		local t = net.ReadTable()
+		return Type.Deserialize(t)
+	end
+	
+
+	function rtc.WriteObject(obj)
+		rtc.WriteTable(Type.Serialize(obj))
+	end
+
+	function rtc.ReadObject()
+		local t = rtc.ReadTable()
 		return Type.Deserialize(t)
 	end
 end
@@ -887,10 +964,10 @@ end
 
 
 -- Set the metatable of _G to fall back to the type system.
-local GMeta = FindMetaTable("_G") or {}
-GMeta.__index = Type.ByName
-setmetatable(_G, GMeta)
-RegisterMetaTable("_G", GMeta)
+--local GMeta = FindMetaTable("_G") or {}
+--GMeta.__index = Type.ByName
+--setmetatable(_G, GMeta)
+--RegisterMetaTable("_G", GMeta)
 
 
 local TEST_NET_PROMISE
@@ -1080,9 +1157,9 @@ hook.Add("Test.Register", "Types", function ()
 
 		TEST_NET_PROMISE = Promise.Create()
 
-		net.Start("Types.TestNetwork")
-			net.WriteObject(obj)
-		net.SendToServer()
+		rtc.Start("Types.TestNetwork")
+			rtc.WriteObject(obj)
+		rtc.SendToServer()
 
 		local r = TEST_NET_PROMISE:Await()
 
@@ -1184,7 +1261,7 @@ end)
 
 if SERVER then
 	util.AddNetworkString("Types.TestNetwork")
-	net.Receive("Types.TestNetwork", function (len, ply)
+	rtc.Receive("Types.TestNetwork", function (len, ply)
 		local t = Type.Register("TEST_OBJECT", nil)
 		t:CreateProperty("Bool")
 		t:CreateProperty("Number")
@@ -1193,15 +1270,15 @@ if SERVER then
 		t:CreateProperty("Child")
 		
 		local obj = net.ReadObject()
-		net.Start("Types.TestNetwork")
-			net.WriteObject(obj)
-		net.Send(ply)
+		rtc.Start("Types.TestNetwork")
+			rtc.WriteObject(obj)
+		rtc.Send(ply)
 
 		Type.ByName["Life"] = nil
 		collectgarbage("collect")
 	end)
 else
-	net.Receive("Types.TestNetwork", function (len)
-		TEST_NET_PROMISE:Complete(net.ReadObject())
+	rtc.Receive("Types.TestNetwork", function (len)
+		TEST_NET_PROMISE:Complete(rtc.ReadObject())
 	end)
 end

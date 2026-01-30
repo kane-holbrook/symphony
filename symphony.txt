@@ -1,4 +1,4 @@
-"symphonylua_run print(stringex)"
+"symphony"
 {
 	"base"		"sandbox"
 	"title"		"Symphony"

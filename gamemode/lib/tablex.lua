@@ -50,6 +50,35 @@ function tablex.SortByMemberEx(tab, memberName, bAsc, preserve)
     return tab
 end
 
+function tablex.SortEx(tab, desc)
+    local t = table.ClearKeys(tab)
+    table.sort(t)
+    if desc then
+        table.Reverse(t)
+    end
+    return t
+end
+
+function tablex.SortByKey(tab, desc)
+    
+    local t = {}
+    local keys = table.GetKeys(tab)
+    table.sort(keys, function (a, b)
+        if desc then
+            return a > b
+        else
+            return a < b
+        end
+    end)
+
+    for i, k in pairs(keys) do
+        local x = tab[k]
+        t[i] = x
+    end
+
+    return t
+end
+
 function tablex.StringIndex(t, str)
     local out = t
 
@@ -106,6 +135,12 @@ function tablex.GetFirst(t)
     return table.ClearKeys(t)[1]
 end
 tablex.First = tablex.GetFirst
+
+function tablex.GetLast(t)
+    local ct = table.ClearKeys(t)
+    return ct[#ct]
+end
+tablex.Last = tablex.GetLast
 
 function tablex.GetMembers(t, member)
     local members = {}

@@ -50,7 +50,9 @@ function Database.Connect()
     Database.hndl:connect()
     Database.hndl:wait()
 
-    hook.Run("Database.Connected")
+    Database.Connected = true
+
+    hook.Run("DatabaseConnected")
 end
 
 function Database.Query(q)
@@ -58,7 +60,6 @@ function Database.Query(q)
 
     local p = Type.New(Type.Query)
     p:SetTTL(30)
-    
     local q = Database.hndl:query(q)
     function q:onSuccess(data)
         p:Complete(data)

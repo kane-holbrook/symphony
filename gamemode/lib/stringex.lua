@@ -135,6 +135,15 @@ function stringex.EscapeHTML(text)
     return text
 end
 
+function stringex.StripHTMLTags(str)
+    if not isstring(str) then 
+        return str 
+    end
+
+    local r = string.gsub(str, "<.->", "")
+    return r
+end
+
 function stringex.Random(n)
     local out = {}
 
@@ -229,7 +238,8 @@ end
 
 function stringex.SubstringBeforeLast(text, delimiter)
     local s = string.Split(text, delimiter)
-    return table.concat(s, "", 1, #s - 1)
+    print(text, delimiter)
+    return table.concat(s, delimiter, 1, #s - 1)
 end
 
 function stringex.SubstringBetween(text, open, close, start)

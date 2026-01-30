@@ -70,6 +70,10 @@ function MAT:Preview()
     PREV = frame
 end
 
+function MAT:IsLoaded()
+    return self:GetInt("_loading") ~= 1
+end
+
 local HTMLMaterials = weaktable(false, true)
 function HTMLMaterial(html, w, h, shader)
     if w == 0 or h == 0 or not w or not h then
@@ -122,75 +126,4 @@ function HTMLMaterial(html, w, h, shader)
     html = dhtml
 
     return mat
-end
-
-function HTMLGradient(css, w, h, shader) 
-    return HTMLMaterial([[<body style='margin:0; padding:0; box-sizing:border-box;'><div style='width:100%; height:100%; box-sizing:border-box; background: ]] .. css ..[[;'></div></body>]], w, h, shader)
-end
-
-function CircleGradient(w, h, ...) 
-
-    local args = {...}
-    
-    local stops = {}
-    for i=1, #args, 2 do
-        local col = args[i]
-        local pos = args[i+1]
-
-        table.insert(stops, string.format("rgba(%i, %i, %i, %.2f) %.2f%%", col.r, col.g, col.b, col.a/255, pos))
-    end
-
-    return HTMLGradient([[radial-gradient(
-        ellipse, 
-        ]] .. table.concat(stops, ", ") ..  [[
-    )]], w, h)
-end
-
-function ConicGradient(w, h, ...)    
-    local args = {...}
-    
-    local stops = {}
-    for i=1, #args, 2 do
-        local col = args[i]
-        local pos = args[i+1]
-
-        table.insert(stops, string.format("rgba(%i, %i, %i, %.2f) %.2f%%", col.r, col.g, col.b, col.a/255, pos))
-    end
-
-    return HTMLGradient([[conic-gradient(, 
-        ]] .. table.concat(stops, ", ") ..  [[
-    )]], w, h)
-end
-
-function LinearGradient(w, h, rotation, ...)    
-    local args = {...}
-    
-    local stops = {}
-    for i=1, #args, 2 do
-        local col = args[i]
-        local pos = args[i+1]
-
-        table.insert(stops, string.format("rgba(%i, %i, %i, %.2f) %.2f%%", col.r, col.g, col.b, col.a/255, pos))
-    end
-
-    return HTMLGradient([[linear-gradient(]] .. rotation .. [[deg, 
-        ]] .. table.concat(stops, ", ") ..  [[
-    )]], w, h)
-end
-
-
-function RepeatingLinearGradient(w, h, rotation, ...)    
-    local args = {...}
-    
-    local stops = {}
-    for i=1, #args, 2 do
-        local col = args[i]
-        local pos = args[i+1]
-
-        table.insert(stops, string.format("rgba(%i, %i, %i, %.2f) %s", col.r, col.g, col.b, col.a/255, pos))
-    end
-
-    return HTMLGradient([[repeating-linear-gradient(]] .. rotation .. [[deg, 
-        ]] .. table.concat(stops, ", ") ..  [[
-    )]], w, h)
 end

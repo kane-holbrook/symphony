@@ -12,10 +12,10 @@ do
 
     -- @test sh_tests/Promises
     function Promise.Prototype:Initialize()
-        self.Events = Type.New(Type.EventBus)
         self.awaits = {}
         self.coroutines = {}
         self.threads = {}
+        self.callback = nil
 
         self:SetCompleted(false)
         self:SetTTL(30)
@@ -34,20 +34,15 @@ do
     end
 
     -- @test sh_tests/Promises
-    function Promise.Prototype:Hook(...)
-        self.Events:Hook("Complete", ...)
+    function Promise.Prototype:Then(func)
+        self.callback = func
     end
-
-    function Promise.Prototype:Unhook(...)
-        self.Events:Unhook(...)
-    end
-    Promise.Prototype.Then = Promise.Prototype.Hook
 
     -- @test sh_tests/Promises
     function Promise.Prototype:ThrowError(err)
         timer.Remove(self:GetId())
         err = err .. "\n" .. debug.traceback()
-        self.Events:Run("Error", err)
+--        self.Events:Run("Error", err)
         self:SetError(err)
 
         return err
@@ -66,8 +61,8 @@ do
         local args = { coroutine.resume(cr, ...) }
         local succ = args[1]
         
-        if not succ then 
-            args[2] = self:ThrowError(args[2]) 
+        if not succ then
+            error(args[2]) 
         end
         
         if coroutine.status(cr) == "dead" then 
@@ -96,7 +91,10 @@ do
         self:SetResult(args)
         timer.Simple(0, function ()
             
-            self.Events:Run("Complete", unpack(args))
+            --self.Events:Run("Complete", unpack(args))
+            if self.callback then
+                self.callback(unpack(args))
+            end
 
             for k, v in pairs(self.awaits) do
                 v:Resume(unpack(args))
@@ -176,6 +174,28 @@ end
 function ispromise(obj)
     return Type.Is(obj, Type.Promise)
 end
+
+
+
+local Deferred = {}
+function Promise.Defer(func, ...)
+    local p = Promise.Create()
+    table.insert(Deferred, { func, p, {...} })
+    return p
+end
+
+hook.Add("Think", "Deferred", function()
+    local top = table.remove(Deferred, 1)
+    if top then
+        local func, p, args = unpack(top)
+        local out = { pcall(func, unpack(args)) }
+        if out[1] then
+            p:Complete(unpack(out, 2))
+        else 
+            p:ThrowError(out[2])
+        end
+    end
+end)
 
 hook.Add("Test.Register", "Promises", function ()
     Test.Register("Promises", function ()
