@@ -1,0 +1,66 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "gmrdb",
+      "request": "launch",
+      "name": "Launch Server",
+      "program": "D:/srcds/srcds_win64.exe",
+      "cwd": "D:/srcds",
+      "args": [
+        "-console",
+        "-game",
+        "garrysmod",
+        "-port",
+        "27015",
+        "+map",
+        "gm_construct",
+        "+maxplayers",
+        "16",
+        "+gamemode",
+        "sstrp",
+        "+host_workshop_collection",
+        "3019265114"
+      ],
+      "sourceRoot": "D:/srcds/garrysmod",
+      "port": 21111,
+      "sourceFileMap": {
+        "D:/srcds/garrysmod/gamemode/symphony": "gamemodes/symphony",
+        "D:/srcds/garrysmod/gamemode/sstrp": "gamemodes/sstrp"
+      },
+      "stopOnEntry": false
+    },
+    {
+      "type": "gmrdb",
+      "request": "attach",
+      "host": "127.0.0.1",
+      "port": 21111,
+      "name": "Attach to Server",
+      "sourceRoot": "D:/srcds/garrysmod",
+      // Important to map Lua source code to breakpoints
+      // (otherwise we'll see missing file errors on VSCode)
+      "sourceFileMap": {
+        // Local absolute path: remote path
+        "D:/srcds/garrysmod/gamemode/symphony": "gamemodes/symphony",
+        "D:/srcds/garrysmod/gamemode/sstrp": "gamemodes/sstrp"
+      },
+      "stopOnEntry": false
+    },
+    {
+      "type": "gmrdb",
+      "request": "attach",
+      "host": "127.0.0.1",
+      "port": 21112,
+      "name": "Attach to GMod",
+      "sourceRoot": "C:/Program Files (x86)/Steam/steamapps/common/GarrysMod",
+      // Important to map Lua source code to breakpoints
+      // (otherwise we'll see missing file errors on VSCode)
+      "sourceFileMap": {
+        // Local absolute path: remote path
+        "D:/srcds/garrysmod/gamemode/symphony": "gamemodes/symphony",
+        "D:/srcds/garrysmod/gamemode/sstrp": "gamemodes/sstrp"
+      },
+      "stopOnEntry": true
+    },
+  ]
+}

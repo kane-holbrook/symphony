@@ -1,0 +1,6 @@
+- Type
+    - Type.Register
+    - Type.New 
+    - Type.GetType
+    - Type.Is
+- Interface
