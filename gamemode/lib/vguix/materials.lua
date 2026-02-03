@@ -94,21 +94,23 @@ function RadialGradient(color1, offset1, color2, offset2, color3)
     end
 
     return function (pnl, w, h) 
-        
+
+        local alpha = surface.GetAlphaMultiplier()
+
         Radial:SetFloat("$c0_x", math.Round(color1.r / 255, dp))
         Radial:SetFloat("$c0_y", math.Round(color1.g / 255, dp))
         Radial:SetFloat("$c0_z", math.Round(color1.b / 255, dp))
-        Radial:SetFloat("$c0_w", math.Round(color1.a / 255, dp))
+        Radial:SetFloat("$c0_w", math.Round((color1.a / 255) * alpha, dp))
         
         Radial:SetFloat("$c1_x", math.Round(color2.r / 255, dp))
         Radial:SetFloat("$c1_y", math.Round(color2.g / 255, dp))
         Radial:SetFloat("$c1_z", math.Round(color2.b / 255, dp))
-        Radial:SetFloat("$c1_w", math.Round(color2.a / 255, dp))
+        Radial:SetFloat("$c1_w", math.Round((color2.a / 255) * alpha, dp))
 
         Radial:SetFloat("$c2_x", math.Round(color3.r / 255, dp))
         Radial:SetFloat("$c2_y", math.Round(color3.g / 255, dp))
         Radial:SetFloat("$c2_z", math.Round(color3.b / 255, dp))
-        Radial:SetFloat("$c2_w", math.Round(color3.a / 255, dp))
+        Radial:SetFloat("$c2_w", math.Round((color3.a / 255) * alpha, dp))
         
         Radial:SetFloat("$c3_x", math.Round(offset1, dp))
         Radial:SetFloat("$c3_y", math.Round(offset2, dp))
@@ -122,14 +124,20 @@ LG_OFFSET = 0
 -- Factory: returns a paint‐closure
 -- rotDeg: 0 = left→right, 90 = bottom→top
 local mat = Material("sstrp25/shaders/lineargradientv2")
-function LinearGradient(col1, off1, col2, off2, col3, rotDeg)
+function LinearGradient(col1, off1, col3, rotDeg)
     
     local colA = col1
     local colB = col3 or colA
     
+
+    local alpha = surface.GetAlphaMultiplier()
+    colA.a = colA.a * alpha
+    colB.a = colB.a * alpha
+
     local rad = math.rad((rotDeg or 0) + LG_OFFSET)
 
-    return function(pnl, w, h)
+    return function(pnl)
+        local w, h = pnl:GetWidth(), pnl:GetHeight()
         -- aspect-correct the direction in UV space
         local ax = w / math.max(h, 1)
         local dx, dy = math.Round(math.cos(rad), 2), math.Round(math.sin(rad), 2)
@@ -137,16 +145,21 @@ function LinearGradient(col1, off1, col2, off2, col3, rotDeg)
         if len > 0 then dx, dy = dx/len, dy/len end
 
         -- colours
-        mat:SetFloat("$c0_x", colA.r/255) mat:SetFloat("$c0_y", colA.g/255)
-        mat:SetFloat("$c0_z", colA.b/255) mat:SetFloat("$c0_w", colA.a/255)
-        mat:SetFloat("$c1_x", colB.r/255) mat:SetFloat("$c1_y", colB.g/255)
-        mat:SetFloat("$c1_z", colB.b/255) mat:SetFloat("$c1_w", colB.a/255)
+        local alpha = surface.GetAlphaMultiplier()
+        mat:SetFloat("$c0_x", colA.r/255) 
+        mat:SetFloat("$c0_y", colA.g/255)
+        mat:SetFloat("$c0_z", colA.b/255) 
+        mat:SetFloat("$c0_w", (colA.a/255) * alpha)
+        mat:SetFloat("$c1_x", colB.r/255) 
+        mat:SetFloat("$c1_y", colB.g/255)
+        mat:SetFloat("$c1_z", colB.b/255) 
+        mat:SetFloat("$c1_w", (colB.a/255) * alpha)
 
         -- pack direction (xy); the shader ignores z/w now
         mat:SetFloat("$c3_x", dx)
         mat:SetFloat("$c3_y", dy)
-        mat:SetFloat("$c3_z", 0)
-        mat:SetFloat("$c3_w", 0)
+        mat:SetFloat("$c3_z", off1)
+        mat:SetFloat("$c3_w", off1)
 
         return mat
     end

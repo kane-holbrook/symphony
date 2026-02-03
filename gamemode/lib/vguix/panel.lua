@@ -11,110 +11,6 @@ end
 
 NO_OP = NO_OP or {}
 
-function uuid()
-	local function rand_hex(bits)
-		return string.format("%0" .. (bits / 4) .. "x", math.random(0, 2^bits - 1))
-	end
-
-	-- Generate parts
-	local time_low = rand_hex(32)
-	local time_mid = rand_hex(16)
-	local time_hi_and_version = bit.bor(bit.band(math.random(0, 0xffff), 0x0fff), 0x4000) -- version 4
-	local clock_seq = bit.bor(bit.band(math.random(0, 0xffff), 0x3fff), 0x8000) -- variant 10xx
-	local node = rand_hex(48)
-
-	return string.format("%s-%s-%04x-%04x-%s", time_low, time_mid, time_hi_and_version, clock_seq, node)
-end
-
-
-function isuuid(str)
-	if not str or type(str) ~= "string" then
-		return false
-	end
-
-	local parts = string.Explode("-", str)
-	if #parts ~= 5 then
-		return false
-	end
-
-	for i, part in ipairs(parts) do
-		if not tonumber(part, 16) then
-			return false
-		end
-	end
-
-	return true
-end
-
-function isany(t, ...)
-    for k, v in pairs({...}) do
-        if t == v then
-            return true
-        end
-    end
-    return false
-end
-
-function wrapfunc(f)
-    if istable(f) then
-        return f
-    end
-
-    local c = {}
-	setmetatable(c, { __call = f })
-    return c
-end
-
-function iscallable(obj)
-    if isfunction(obj) then
-        return true
-    elseif istable(obj) then
-        return getmetatable(obj).__call ~= nil
-    else
-        return false
-    end
-end
-
-function nticks(n, func, ...)
-    local id = uuid()
-    local args = {...}
-    hook.Add("Tick", id, function()
-        n = n - 1
-        if n == 0 then
-            func(unpack(args))
-            hook.Remove("Tick", uuid)
-        end
-    end)
-end
-
--- Creates a timer if it doesn't exist
-local debouncers = {}
-function debounce(name, time, func, ...)
-    name = tostring(name)
-
-    time = time or 0
-    debouncers[name] = { func, { ... } }
-
-    if not timer.Exists(name) then
-        local args = {...}
-        timer.Create(name, time, 1, function ()
-            local func = debouncers[name][1]
-            local args = debouncers[name][2]
-            func(unpack(args))
-            debouncers[name] = nil
-        end)
-    end
-end
-
-function cancelDebounce(name)
-    timer.Remove(tostring(name))
-end
-
-function adjustDebounce(name, time)
-    timer.Adjust(tostring(name), time)
-end
-
-
 function vguix.ParseExtent(value, useHeight)
     assert(value)
 
@@ -303,7 +199,7 @@ do
 
             local f = p[func]
             if isfunction(f) then
-                f(self, ...) 
+                f(p, ...) 
             end
 
             for k, v in pairs(p:GetChildren()) do

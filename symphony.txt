@@ -3,6 +3,5 @@
 	"base"		"sandbox"
 	"title"		"Symphony"
 	"author"	"Xalphox"
-	"category" 	"rp"
-	
+	"category" 	"rp"	
 }

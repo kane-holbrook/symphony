@@ -190,7 +190,7 @@ function PANEL:LayoutChildren(w, h)
 
         local gap = self:GetGap()
         
-        local growElement
+        local growElements = {}
         local cw, ch, tw, th = 0, 0, -gap, -gap
         local numNonGrowElements = 0, 0
 
@@ -200,7 +200,7 @@ function PANEL:LayoutChildren(w, h)
             end
 
             if v:GetGrow() then
-                growElement = v
+                table.insert(growElements, v)
             else
                 local vw = v:GetWidth() + v:GetMarginLeft() + v:GetMarginRight()
                 local vh = v:GetHeight() + v:GetMarginTop() + v:GetMarginBottom()
@@ -225,40 +225,35 @@ function PANEL:LayoutChildren(w, h)
             h = ltr and ch + pt + pb or th + pt + pb
         end
 
-        if growElement then
-            local dbg_grow = growElement.Debug["Grow"]
+        local numGrowElements = #growElements
+        if numGrowElements > 0 then
             if ltr then
                 local sz = math.Round(w - tw - pl - pr - math.max(0, gap * (numNonGrowElements)), 0)
 
-                if dbg_grow then
-                    print(self, "GrowX", "sz: " .. sz, "w: " .. w, "tw: " .. tw, "pl: " .. pl, "pr: " .. pr, "gap: " .. (gap * (numNonGrowElements - 1)), numNonGrowElements)
+                for _, growElement in ipairs(growElements) do
+                    growElement:SetWide(sz/numGrowElements)
+                    growElement:SetComputed("Wide", nil)
+
+                    --growElement.Width = sz
+                    --growElement:CalculateBounds():Await()
+
+                    local vw = sz/numGrowElements + growElement:GetMarginLeft() + growElement:GetMarginRight()
+                    cw = math.max(cw, vw)
+                    tw = tw + vw + gap                
                 end
-
-                growElement:SetWide(sz)
-                growElement:SetComputed("Wide", nil)
-
-                --growElement.Width = sz
-                --growElement:CalculateBounds():Await()
-
-                local vw = sz + growElement:GetMarginLeft() + growElement:GetMarginRight()
-                cw = math.max(cw, vw)
-                tw = tw + vw + gap
             else
                 local sz = math.Round(h - th - pt - pb - math.max(0, gap * (numNonGrowElements)), 0)
 
-                
-                if dbg_grow then
-                    print(self, "GrowY", "sz: " .. sz, "w: " .. w, "tw: " .. tw, "pl: " .. pl, "pr: " .. pr, "gap: " .. (gap * (numNonGrowElements - 1)), numNonGrowElements)
+                for _, growElement in ipairs(growElements) do
+                    growElement:SetTall(sz)
+                    growElement:SetComputed("Tall", nil)
+                    --growElement.Height = sz
+                    --growElement:CalculateBounds():Await()
+
+                    local vh = sz + growElement:GetMarginTop() + growElement:GetMarginBottom()
+                    ch = math.max(ch, vh)
+                    th = th + vh + gap
                 end
-
-                growElement:SetTall(sz)
-                growElement:SetComputed("Tall", nil)
-                --growElement.Height = sz
-                --growElement:CalculateBounds():Await()
-
-                local vh = sz + growElement:GetMarginTop() + growElement:GetMarginBottom()
-                ch = math.max(ch, vh)
-                th = th + vh + gap
             end
         end
 
@@ -477,8 +472,12 @@ function PANEL:PaintMesh(w, h)
         cam.PushModelMatrix(m, true)
         
             
+            render.PushFilterMin(TEXFILTER.ANISOTROPIC)
+            render.PushFilterMag(TEXFILTER.ANISOTROPIC)
+
             render.SetMaterial(mat)
             p_mesh:Draw()
+
 
             local strokeW = self:GetStrokeWidth()
             if strokeW > 0 then
@@ -556,6 +555,9 @@ function PANEL:PaintMesh(w, h)
                 end
 
             end
+            
+            render.PopFilterMin()
+            render.PopFilterMag()
             
         cam.PopModelMatrix()
         render.SetScissorRect(0, 0, ScrW(), ScrH(), false)

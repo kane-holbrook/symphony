@@ -160,6 +160,15 @@ vguix.Namespaces = {
         end
     },
     {
+        { "Hook", "Hook", "f" },
+        function (pnl, k, v)
+            local f = SmartCompileString(v, "vguix.ParseNode", true)
+            setfenv(f, pnl:GetFuncEnv())
+            hook.Add(k, self, f)
+            return 
+        end
+    },
+    {
         { "Init" },
         function (pnl, k, v)
             local f = SmartCompileString(v, string.format([[<%s Init:%s="%s">]], pnl.ClassName, k, v), true)
@@ -338,6 +347,7 @@ local function ApplyProperties(pnl, node)
         if isfunction(f) then
             f(pnl, v)
         else
+            pnl[k] = v
             fe[k] = v
         end
     end
@@ -371,7 +381,7 @@ function vguix.CreateFromNode(parent, node)
         parent[tgt]:Remove()
         return nil
     elseif node.Tag == "Listen" then
-        local event, children, immediate
+        local event, children, immediate, func
         for _, v in pairs(node.Attributes) do
             if v.Name == "Event" then
                 event = v.Value
@@ -379,11 +389,13 @@ function vguix.CreateFromNode(parent, node)
                 immediate = v.Value == "true" or v.Value == "1"
             elseif v.Name == "Children" then
                 children = v.Value == "true" or v.Value == "1"
+            elseif v.Name == "Func" then
+                func = SmartCompileString(v.Value, "vguix.CreateFromNode.Listen", true)
             end
         end
 
         assert(event, "Listen tag must have an 'Event' attribute")
-        hook.Add(event, parent, function ()
+        hook.Add(event, parent, func or function ()
             if children then
                 parent:InvalidateChildren(true, immediate)
             else

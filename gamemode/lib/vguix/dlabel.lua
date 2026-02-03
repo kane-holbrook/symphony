@@ -20,6 +20,10 @@ function PANEL:Init()
     self:SetSize("auto", "auto")
 end
 
+function PANEL:Think()
+    self:SetTextColor(self:GetFuncEnv().FontColor)
+end
+
 function PANEL:SetWrap(wrap)
     self.Wrap = wrap
     return BaseClass.SetWrap(self, wrap)

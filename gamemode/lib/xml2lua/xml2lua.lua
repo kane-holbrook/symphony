@@ -49,8 +49,13 @@
 --
 --@author Paul Chakravarti (paulc@passtheaardvark.com)
 --@author Manoel Campos da Silva Filho
+
+-- Modified by Xalphox
+
+AddCSLuaFile()
+
 local xml2lua = { _VERSION = "1.6-1" }
-local XmlParser = include("xmlparser.lua")
+local XmlParser = include("parser.lua")
 
 ---Recursivelly prints a table in an easy-to-ready format
 --@param tb The table to be printed

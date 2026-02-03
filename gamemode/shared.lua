@@ -1,72 +1,68 @@
 AddCSLuaFile()
 DeriveGamemode("sandbox")
 
-SYMPHONY = true
+Symphony = {}
+Symphony.Version = "0.0.1"
+Symphony.StartTime = SysTime()
 
-sym = sym or {}
+collectgarbage("collect")
+MsgC("\n\n")
+file.CreateDir("symphony")
 
-SYM_START_TIME = SysTime()
+include("lib/tablex.lua")
+include("lib/stringex.lua")
+include("core/utils.lua")
+include("lib/vguix.lua")
+include("lib/materialex.lua")
+include_sh("lib/cami.lua")
+sfs = include_sh("lib/sfs.lua")
+xml2lua = include_sh("lib/xml2lua/xml2lua.lua")
 
-include("utils.lua")
-IncludeEx("lib/containers.lua", Realm.Shared)
-IncludeEx("lib/stringex.lua", Realm.Shared)
-IncludeEx("lib/mathex.lua", Realm.Shared)
-IncludeEx("lib/tablex.lua", Realm.Shared)
-IncludeEx("lib/uuid.lua", Realm.Shared)
-IncludeEx("lib/drawex.lua", Realm.Shared)
-IncludeEx("lib/materialex.lua", Realm.Shared)
-IncludeEx("lib/vguix.lua", Realm.Shared)
+include("core/logging.lua")
+Log.Write(LOG_INFO, "INFO", "Starting Symphony (" .. Symphony.Version .. ")")
 
--- core/sh_database.lua
-IncludeEx("core/sh_net.lua", Realm.Shared)
-IncludeEx("core/sh_types.lua", Realm.Shared)
-IncludeEx("types/framework/proxy.lua", Realm.Shared)
-IncludeEx("types/framework/primitives.lua", Realm.Shared)
-IncludeEx("types/framework/promise.lua", Realm.Shared)
-IncludeEx("types/framework/collections.lua", Realm.Shared)
-IncludeEx("types/framework/datetime.lua", Realm.Shared)
+include("core/types.lua")
+include("core/primitives.lua")
+include("core/promises.lua")
+include("core/datetime.lua")
+include("core/tests.lua")
+include_sv("core/database.lua")
+include("core/http.lua")
+include("core/rpc.lua")
+include("core/datatable.lua")
+include("core/entdata.lua")
+include("core/virtualent.lua")
+include("core/proceduralmaterial.lua")
+include("core/interface.lua")
 
-IncludeEx("types/framework/account.lua", Realm.Shared)
-IncludeEx("types/framework/connection.lua", Realm.Shared)
-IncludeEx("types/framework/usergroup.lua", Realm.Shared)
-IncludeEx("types/roleplay/item.lua", Realm.Shared)
-IncludeEx("types/roleplay/inventory.lua", Realm.Shared)
-IncludeEx("types/roleplay/weapon.lua", Realm.Shared)
-IncludeEx("types/roleplay/clothes.lua", Realm.Shared)
-IncludeEx("types/roleplay/character.lua", Realm.Shared)
-IncludeEx("types/items/weapons/morita_mk1.lua", Realm.Shared)
-IncludeEx("types/items/weapons/morita_saw.lua", Realm.Shared)
-
-IncludeEx("core/sv_database.lua", Realm.Server)
-
-IncludeEx("ui/sh_menubar.lua", Realm.Shared)
-
-IncludeEx("ui/components/cl_circle.lua", Realm.Client)
-IncludeEx("ui/components/cl_roundedbox.lua", Realm.Client)
-IncludeEx("ui/components/sh_scrollpanel.lua", Realm.Shared)
-IncludeEx("ui/components/sh_button.lua", Realm.Shared)
-IncludeEx("ui/components/sh_textbox.lua", Realm.Shared)
-IncludeEx("ui/components/sh_slider.lua", Realm.Shared)
-IncludeEx("ui/components/sh_popover.lua", Realm.Shared)
-IncludeEx("ui/components/sh_tooltip.lua", Realm.Shared)
-IncludeEx("ui/components/sh_modal.lua", Realm.Shared)
-IncludeEx("ui/components/sh_html.lua", Realm.Shared)
-IncludeEx("ui/menu/sh_menu.lua", Realm.Shared)
-IncludeEx("ui/menu/sh_select_character.lua", Realm.Shared)
-IncludeEx("ui/menu/sh_create_character.lua", Realm.Shared)
-IncludeEx("ui/config/sh_entity_inspector.lua", Realm.Shared)
+include("impl/setting.lua")
+include("impl/octtree.lua")
+include("impl/nav.lua")
+include("impl/menubar.lua")
+include("impl/usergroups.lua")
+include("impl/users.lua")
+include("impl/commands.lua")
 
 
-function Xalphox()
+local PLY = FindMetaTable("Player")
+function PLY:IsAdmin()
+    return true
+end
+
+function PLY:IsSuperAdmin()
+    return true
+end
+
+
+Xalphox = function ()
     for k, v in pairs(player.GetAll()) do
-        if v:Nick() == "Xalphox" then
+        if v:Name() == "Xalphox" then
             return v
         end
     end
 end
 
-
-
-function GM:PlayerDeathThink( pl )
-    print("Player DeathThink")
-end
+rtc.Receive("Test", function ()
+    rtc.Test = rtc.ReadObject()
+    print("Received test object: " .. tostring(rtc.Test))
+end)
