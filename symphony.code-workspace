@@ -1,0 +1,29 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../sstrp"
+		},
+		{
+			"path": "../symphony old"
+		},
+		{
+			"path": "../../addons/infmap2"
+		},
+		{
+			"path": "../../../../gmod_lanes"
+		},
+		{
+			"path": "../../../../gthread"
+		},
+		{
+			"path": "../sandbox"
+		},
+		{
+			"path": "../base"
+		}
+	],
+	"settings": {}
+}
