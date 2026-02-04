@@ -396,8 +396,9 @@ do
 
     function PNL.Prototype:OnPropertyChanged(property, new, old)
         if property == "Visible" then
-            print(new, old)
-            self:GetParent():InvalidateLayout(nil, nil, nil, true)
+            if self:GetParent() then
+                self:GetParent():InvalidateLayout(nil, nil, nil, true)
+            end
             return
         end
     end 
@@ -620,7 +621,6 @@ do
             self:SetProperty("Visible", value)
         end
         
-        self:GetParent():InvalidateLayout(nil, nil, nil, true)
         return self
     end
 
@@ -649,11 +649,21 @@ do
             name = nil
         end
 
-        t = t or "Panel"
-        local el = Interface.Create(t, self)
-        if name then
-            el:SetName(name)
+        local el
+        if istable(t) then
+            t:SetParent(self)
+            if name then
+                t:SetName(name)
+            end
+            el = t
+        else
+            t = t or "Panel"
+            el = Interface.Create(t, self)
+            if name then
+                el:SetName(name)
+            end
         end
+        self:InvalidateLayout(nil, nil, nil, true)
         return el
     end
 
@@ -689,7 +699,7 @@ do
 
         if self:IsSizeDerived() and not noChildren then
             self:LayoutChildren()
-            self:CancelDebounce()
+            self:CancelLayout()
         end
 
         local oldWidth, oldHeight = self.LastWidth, self.LastHeight
@@ -788,7 +798,6 @@ do
 
         self.LastWidth = w
         self.LastHeight = h
-        self.LastLayout = engine.TickCount()
     end
 
     function PNL.Prototype:LayoutChildren(x, y)
@@ -1323,6 +1332,16 @@ do
         end
     end
 
+    function PNL.Prototype:FindParent(name)
+        local p = self:GetParent()
+        while p do
+            if p:GetName() == name then
+                return p
+            end
+            p = p:GetParent()
+        end
+    end
+
     function PNL.Prototype:GetHoverParent()
         local p = self:GetParent()
         while p do
@@ -1412,12 +1431,12 @@ do
         end
     end
 
-    function PNL.Prototype:OnCursorEntered()
-        self:StartHover(self)
+    function PNL.Prototype:OnCursorEntered(old)
+        self:StartHover(self, old)
     end
 
-    function PNL.Prototype:OnCursorExited()
-        self:EndHover(self)
+    function PNL.Prototype:OnCursorExited(new)
+        self:EndHover(self, new)
     end
 
     function PNL.Prototype:IsChildOf(pnl)
@@ -1435,7 +1454,7 @@ do
         return p:IsChildOf(self)
     end 
 
-    function PNL.Prototype:StartHover(src)
+    function PNL.Prototype:StartHover(src, last)
         
         if (self:GetHoverable() and src ~= self) then
             return
@@ -1444,8 +1463,13 @@ do
         if not self:GetHoverable() and self == src then
             local p = self:GetHoverParent()
             if p then
-                p:StartHover(p)
+                p:StartHover(p, last)
             end
+            return
+        end
+
+        -- Do nothing if we're already hovered and the new hovered panel is a child of us (we're still effectively hovered in this case).
+        if self:GetHovered() then
             return
         end
 
@@ -1476,10 +1500,10 @@ do
         end
 
         -- Propagate to children
-        self:InvokeChildren("StartHover", self:GetHoverable() and self or src)
+        self:InvokeChildren("StartHover", self:GetHoverable() and self or src, last)
     end
 
-    function PNL.Prototype:EndHover(src)
+    function PNL.Prototype:EndHover(src, new)
         if (self:GetHoverable() and src ~= self) then
             return
         end
@@ -1494,8 +1518,12 @@ do
 
         -- If we're hoverable, check to see if the new hovered panel is a child of us; if so, do nothing.
         local hovered = self:GetHost():GetHoveredPanel()
+        if hovered == self then
+            return
+        end
+
         if hovered and hovered ~= self then
-            local p = hovered:GetParent()
+            local p = hovered
             while p do
                 if p ~= self and p:GetHoverable() then
                     break
@@ -1600,7 +1628,6 @@ do
 
     function PanelHost.Prototype:PaintChildren()
         base(self, "PaintChildren")
-        
     end
 
     function PanelHost.Prototype:OnCursorEntered()
@@ -1630,13 +1657,13 @@ do
             self.HoveredPanel = hover
 
             if old then
-                old:OnCursorExited()
+                old:OnCursorExited(hover)
             end
 
             self:OnHoverChanged(self.HoveredPanel, old)
 
             if self.HoveredPanel then
-                self.HoveredPanel:OnCursorEntered()
+                self.HoveredPanel:OnCursorEntered(old)
             end 
         end
     end
@@ -1829,6 +1856,61 @@ do
     end
 end
 
+-- Overlay
+local Overlay = Interface.Register("Overlay", PNL)
+do
+    function Overlay.Prototype:Initialize()
+        base(self, "Initialize")
+
+        self:SetAbsolute(true)
+        self:SetVisible(false)
+    end
+
+    function Overlay.Prototype:OnPropertyChanged(key, new, old)
+        if key == "Visible" then
+            if new ~= old then
+                if new then
+                    self:Open()
+                else
+                    self:Close()
+                end
+            end
+        end
+
+        return base(self, "OnPropertyChanged", key, new, old)
+    end
+
+    function Overlay.Prototype:Open()
+        if IsValid(self.Panel) then
+            return
+        end
+        
+        self.Panel = Interface.Create("Panel", self.Host)
+        local x, y = self:LocalToScreen(0, 0)
+        self.Panel:SetX(x)
+        self.Panel:SetY(y)
+        self.Panel:SetWidth(self:GetWidth())
+        self.Panel:SetHeight(self:GetHeight())
+        self.Panel:SetFill(Color(0, 0, 0, 255))
+        self.Panel.Children = self.Children 
+    end
+
+    function Overlay.Prototype:Close()
+        if IsValid(self.Panel) then
+            self.Panel:Dispose()
+            self.Panel = nil
+        end
+    end
+
+    function Overlay.Prototype:StartHover(src)
+        self:Open()
+    end
+
+    function Overlay.Prototype:EndHover(src)
+        self:Close()
+    end
+end
+
 -- Setup
 do
     Interface.BasePanel = Interface.Create("Host")
@@ -1930,6 +2012,7 @@ end
 
 -- Testing
 p = Interface.Create("Panel")
+    :SetName("Test")
     :SetX(function (self)
         local pw = self:GetParent():GetWidth()
         return pw / 2 - self:GetOuterWidth() / 2
@@ -1979,7 +2062,33 @@ p = Interface.Create("Panel")
         :SetWidth("Grow")
         :SetHeight(128)
         :SetPadding(16)
-        :SetFill(Color(255, 255, 255))
+        :SetHoverable(true)
+        :SetFill(Color(255, 255, 255, 192))
+        :SetHover("Fill", Color(255, 255, 255, 255), 0.25)
+        :SetAlign(5)
+        :Add("Panel")
+            :SetName("Grandchild")
+            :SetHoverable(true)
+            :SetWidth(64)
+            :SetHeight(64)
+            :SetFill(Color(255, 255, 0))
+            :Finish()
+        :Add("Overlay", "Overlay")
+            :SetX(function (self)
+                local parent = self:GetParent()
+                return -parent:GetPaddingLeft()
+            end)
+            :SetY(function (self)
+                local parent = self:GetParent()
+                return parent:GetHeight() - parent:GetPaddingTop()
+            end)
+            :SetWidth(function (self)
+                local parent = self:GetParent()
+                return parent:GetWidth()
+            end)
+            :SetHeight("50%")
+            :SetFill(Color(255, 0, 0, 255))
+            :Finish()
         :Finish()
     :Add()
         :SetName("Right")
@@ -1995,7 +2104,7 @@ p = Interface.Create("Panel")
         :SetWidth(64)
         :SetHeight(64)
         :SetFill(Color(255, 255, 255))
-        :Finish()
+        :Finish()   
 
 
 

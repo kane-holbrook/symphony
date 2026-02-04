@@ -163,6 +163,11 @@ function debounce(time, identifier, func, ...)
     end)
 end
 
+function cancelDebounce(identifier)
+    identifier = identifier or currentfile(1)
+    debouncers[identifier] = nil
+end
+
 
 
 function Deref(t, ...)
