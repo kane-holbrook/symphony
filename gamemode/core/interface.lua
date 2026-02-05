@@ -267,7 +267,7 @@ do
     end
 
     function PNL.Prototype:GetCursor()
-        return self:GetProperty("Cursor") or self:GetParent():GetCursor() or "_"
+        return self:GetProperty("Cursor") or (self:GetParent() and self:GetParent():GetCursor()) or "_"
     end
 
     function PNL.Prototype:SetField(field, value)
@@ -1551,16 +1551,19 @@ do
                 end
                 
                 local duration = v.Duration * progress
+                print("Initial", v.Initial, self, self:GetAlpha())
                 v.Animation = self:Animate(k, v.Initial, duration, 1, v.EaseFunc):Then(function (succ)
                     if not succ then
                         return
                     end
 
                     v.Initial = nil
+                    print(self, "Initial set to nil")
                     v.Animation = nil
                 end)
             else
                 self:SetProperty(k, v.Initial)
+                print(self, "* Initial set to nil")
                 v.Initial = nil
             end
         end
@@ -1881,6 +1884,10 @@ do
     end
 
     function Overlay.Prototype:Open()
+        self:CreatePanel()
+    end
+
+    function Overlay.Prototype:CreatePanel()
         if IsValid(self.Panel) then
             return
         end
@@ -1892,21 +1899,37 @@ do
         self.Panel:SetWidth(self:GetWidth())
         self.Panel:SetHeight(self:GetHeight())
         self.Panel:SetFill(Color(0, 0, 0, 255))
+        
         self.Panel.Children = self.Children 
+        return self.Panel
     end
 
-    function Overlay.Prototype:Close()
+    function Overlay.Prototype:RemovePanel()
         if IsValid(self.Panel) then
             self.Panel:Dispose()
             self.Panel = nil
         end
     end
 
-    function Overlay.Prototype:StartHover(src)
+    function Overlay.Prototype:Close()
+        self:RemovePanel()
+    end
+
+    function Overlay.Prototype:StartHover(src, last)
         self:Open()
     end
 
-    function Overlay.Prototype:EndHover(src)
+    function Overlay.Prototype:EndHover(src, new)
+        local p = new
+        while p do
+            -- If it's the same panel or one of our children, we don't close the overlay since we're effectively still hovered.
+            if p == self:GetParent() then
+                return
+            end
+            p = p:GetParent()
+        end
+
+        print(self:GetHost():GetHoveredPanel(), new)
         self:Close()
     end
 end
@@ -2088,6 +2111,19 @@ p = Interface.Create("Panel")
             end)
             :SetHeight("50%")
             :SetFill(Color(255, 0, 0, 255))
+            :SetAlpha(0)
+            :SetField("Open", function (self)
+                local p = self:CreatePanel()
+                if p:GetAlpha() == 255 then
+                    p:SetAlpha(0)
+                end
+                p:AlphaTo(255, 0.5)
+            end)
+            :SetField("Close", function (self)
+                self.Panel:AlphaTo(0, 0.5):Then(function ()
+                    self:RemovePanel()
+                end)
+            end)
             :Finish()
         :Finish()
     :Add()
