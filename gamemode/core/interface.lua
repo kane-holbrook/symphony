@@ -2307,6 +2307,7 @@ do
     function Overlay.Prototype:Open()
         if not self:IsOpen() then
             self:SetVisible(true)
+            self:InvalidateLayout()
             table.insert(self:GetHost():GetChildren(), self)
         end
     end
@@ -2645,12 +2646,12 @@ Interface.RegisterFromXML("TestInside", [[
                 :Width="self:GetParent():GetWidth()"
                 :Shape="RoundedBox(self:GetWidth(), self:GetHeight(), 0, 0, 16, 16)"
                 Fill="0 0 0 128" 
-                Height="128"
                 ShowOnHover="false"
-                MarginBottom="16"
+                PaddingBottom="16"
                 Hoverable="true"
                 Align="8"
                 Direction="Down"
+                Gap="8"
             >
                 <Panel Width="100%" Fill="255 0 0 128" Hoverable="true" Hover:Fill="255 255 255 128, 0.2">
                     <Text Value="Test" />
