@@ -329,6 +329,13 @@ function MATERIAL:Decode(m)
     end
     return out
 end
+
+function MATERIAL:Parse(val)
+    if isstring(val) then
+        return Material(val, "smooth noclamp")
+    end
+    return val
+end
 PopulateMetaTable(FindMetaTable("IMaterial"), MATERIAL)
 
 local ITEXTURE = Type.Register("Texture", PRIMITIVE, { Code = TYPE_TEXTURE })

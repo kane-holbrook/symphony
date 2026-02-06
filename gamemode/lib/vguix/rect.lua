@@ -438,7 +438,7 @@ function PANEL:PaintMesh(w, h)
     
     local mat = self:GetMat()
     if isfunction(mat) then
-        mat = mat(self, w, h)
+        mat = mat(w, h)
     end
 
     local color = self:GetFill()
@@ -484,7 +484,7 @@ function PANEL:PaintMesh(w, h)
                 
                 mat = self:GetStrokeMat()
                 if isfunction(mat) then
-                    mat = mat(self, w, h)
+                    mat = mat(w, h)
                 end
                 
                 color = self:GetStroke()

@@ -485,7 +485,7 @@ do
                     if succ then
                         value = parsedValue
                     else
-                        error(tostring(self) .. ": Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName() .. " - " .. parsedValue)
+                        error(tostring(self) .. ": Property " .. name .. " expects " .. p.Type:GetName() .. " but got " .. Type.GetType(value):GetName() .. " - " .. tostring(parsedValue))
                     end
                 end
 			end

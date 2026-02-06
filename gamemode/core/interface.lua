@@ -27,7 +27,7 @@ do
         local el = Type.New(t)
         parent = parent or Interface.BasePanel
         el:SetParent(parent)
-        el.Host = parent and (parent.Host or parent)
+        el.Host = parent and parent:GetHost()
 
         return el
     end
@@ -40,6 +40,10 @@ do
         end
         super = super or Type.GetByName("Interface.Panel")
         return Type.Register(name, super, ...)
+    end
+
+    function Interface.GetByName(name)
+        return Type.GetByName("Interface." .. name)
     end
 
     function Interface.GetFont(font, size, weight, blursize, scanlines, antialias, underline, italic, strikeout, symbol, rotary, shadow, additive, outline, extended)    
@@ -101,6 +105,41 @@ do
     end
 end
 
+local function ApplyProperties(pnl, node)
+    local propertyMap = pnl:GetType():GetPropertiesMap()
+    for _, t in pairs(node.Attributes) do
+        local k = t.Name
+        local v = t.Value
+
+        local namespace = stringex.SubstringBefore(k, ":")
+        if namespace then
+            k = string.sub(k, #namespace + 2)
+            
+            if namespace == "" then
+                namespace = "Computed"
+            end
+
+            local cont, result = hook.Run("Interface.XMLParseNamespace", pnl, namespace, k, v)
+            if cont == nil then
+                ErrorNoHalt(string.format("Failed to parse XML attribute '%s' on element <%s>: unrecognized namespace '%s'\n", t.Name, node.Tag, namespace))
+            end
+
+            if cont == false then
+                continue
+            else
+                v = result
+            end
+        else
+            local setter = pnl["Set" .. k]
+            if setter then
+                setter(pnl, v)
+            else
+                pnl[k] = v
+            end
+        end
+
+    end
+end
 
 -- Panel
 local PNL = Type.Register("Interface.Panel")
@@ -143,6 +182,7 @@ do
     PNL:CreateProperty("MarginTop", Type.Number, { Default = 0 })
     PNL:CreateProperty("MarginRight", Type.Number, { Default = 0 })
     PNL:CreateProperty("MarginBottom", Type.Number, { Default = 0 })
+    PNL:CreateProperty("Debug", Type.Bool, { Default = false })
 
     function PNL.Prototype:Initialize()
         self.Id = uuid()
@@ -161,7 +201,14 @@ do
         self:SetShape()
         self:SetWidth()
         self:SetHeight()
-        self:InvalidateLayout()
+        self:InitXML()
+        self:InvalidateLayout(nil, true)
+    end
+
+    function PNL.Prototype:DebugMessage(...)
+        if self:GetDebug() then
+            print(self, ...)
+        end
     end
 
     local function DefaultShape(self)
@@ -171,6 +218,19 @@ do
             self:GetWidth(), self:GetHeight(),
             0, self:GetHeight()
         }
+    end
+    
+    function PNL.Prototype:InitXML()
+        local xmlData = self:GetType().XML
+        if xmlData then
+            if xmlData.Attributes then
+                ApplyProperties(self, xmlData)
+            end
+
+            for k, v in pairs(xmlData.Children) do
+                Interface.CreateFromNode(self, v)
+            end
+        end
     end
 
     function PNL.Prototype:SetShape(shape)
@@ -183,13 +243,13 @@ do
             self:SetComputed("Shape", nil)
             self:SetProperty("Shape", shape)
         end
-        self:InvalidateLayout()
+        self:InvalidateLayout(nil, true)
         return self
     end
 
     function PNL.Prototype:SetAlign(align)
         self:SetProperty("Align", align)
-        self:InvalidateLayout(nil, nil, nil, true)
+        self:InvalidateLayout(nil, true, nil, true)
         return self
     end
 
@@ -203,18 +263,19 @@ do
     }
     function PNL.Prototype:SetDirection(direction)
         if isstring(direction) then
-            direction = DirectionMap[string.lower(direction)]
-            assert(direction, "Invalid direction string specified")
+            local dir = DirectionMap[string.lower(direction)]
+            assert(dir, "Invalid direction string specified: " .. tostring(direction))
+            direction = dir
         end
 
         self:SetProperty("Direction", direction)
-        self:InvalidateLayout(nil, nil, nil, true)
+        self:InvalidateLayout(nil, true)
         return self
     end
 
     function PNL.Prototype:SetWrap(wrap)
         self:SetProperty("Wrap", wrap)
-        self:InvalidateLayout(nil, nil, nil, true)
+        self:InvalidateLayout(nil, true)
         return self
     end
 
@@ -238,7 +299,7 @@ do
             return self
         end
         self:SetProperty("StrokeMaterial", mat)
-        
+        self:InvalidateLayout(nil, true)
         return self
     end
 
@@ -358,9 +419,9 @@ do
     function PNL.Prototype:SetComputed(property, func)
         assert(property, "No property specified")
         assert(func == nil or isfunction(func), "Computed value must be a function or nil")
-        --if func then
-            --setfenv(func, self.FuncEnv)
-        --end
+        if func then
+            setfenv(func, setmetatable({ self = self }, { __index = self.FuncEnv }))
+        end
         self.Computed[property] = func
         return self
     end
@@ -395,6 +456,9 @@ do
     end
 
     function PNL.Prototype:OnPropertyChanged(property, new, old)
+
+        self:DebugMessage("Property changed:", property, "from", old, "to", new)
+
         if property == "Visible" then
             if self:GetParent() then
                 self:GetParent():InvalidateLayout(nil, nil, nil, true)
@@ -586,7 +650,7 @@ do
     end
 
     function PNL.Prototype:IsSizeRelative()
-        return self:IsRelativeWidth() or self:IsRelativeHeight()
+        return self:IsRelativeWidth() or self:IsRelativeHeight() or self:IsSizeGrow()
     end
 
 
@@ -677,25 +741,26 @@ do
     function PNL.Prototype:OnChildRemoved(child)
     end
 
-    function PNL.Prototype:InvalidateLayout(immediate, noPropagate, noChildren, force)
+    function PNL.Prototype:InvalidateLayout(immediate, force, noPropagate, noChildren)
         if not immediate then
             local p = Promise.Create()
             debounce(0, self, function ()
-                self:InvalidateLayout(true, noPropagate, noChildren, force)
+                self:InvalidateLayout(true, force, noPropagate, noChildren)
                 p:Complete()
             end)
             return p
         end
         
-        self:PerformLayout(noPropagate, noChildren, force)
+        self:PerformLayout(force, noPropagate, noChildren)
     end
 
     function PNL.Prototype:CancelLayout()
         cancelDebounce(self)
     end
 
-    function PNL.Prototype:PerformLayout(noPropagate, noChildren, force)
+    function PNL.Prototype:PerformLayout(force, noPropagate, noChildren)
         self.LastLayout = CurTime()
+
 
         if self:IsSizeDerived() and not noChildren then
             self:LayoutChildren()
@@ -706,16 +771,48 @@ do
         local w, h = self:Compute("Width"), self:Compute("Height")
 
         if not force and IsValid(self.Mesh) and oldWidth == w and oldHeight == h then
+            self:DebugMessage("Skip", force, self.Mesh, oldWidth, oldHeight, w, h)
             -- Don't do anything if we're exactly the same size.
             return
         end
 
+        self:DebugMessage("Calc", force, self.Mesh, oldWidth, oldHeight, w, h)
+        self:RegenerateMesh()
+
+        -- If we're not a relative size, we need to propagate invalidation upwards.
+        if not noPropagate then
+            if not self:IsSizeRelative() then
+                local parent = self:GetParent()
+                if parent and parent:IsSizeDerived() then
+                    parent:InvalidateLayout(nil, true)
+                end
+            else
+                -- Otherwise, propagate it downwards to relative sized children.
+                for k, v in pairs(self:GetChildren()) do
+                    if v:IsSizeRelative() then
+                        v:InvalidateLayout(nil, true)
+                    end
+                end
+            end
+        end
+        
+
+        -- If we're derived size (we size to children), we run the layout after we've derived our size
+        if not self:IsSizeDerived() and not noChildren then
+            self:LayoutChildren()
+        end
+
+        self.LastWidth = w
+        self.LastHeight = h
+    end
+
+    function PNL.Prototype:RegenerateMesh()
         if IsValid(self.Mesh) then
             self.Mesh:Destroy()
         end
 
+        local w, h = self:Compute("Width"), self:Compute("Height")
         local shape = self:Compute("Shape")
-
         self.Mesh = Mesh()        
         mesh.Begin(self.Mesh, MATERIAL_TRIANGLES, #shape/2 + 1)
             local cx, cy = w/2, h/2
@@ -771,33 +868,6 @@ do
             mesh.AdvanceVertex()
 
         mesh.End()
-
-
-        -- If we're not a relative size, we need to propagate invalidation upwards.
-        if not noPropagate then
-            if not self:IsSizeRelative() then
-                local parent = self:GetParent()
-                if parent and parent:IsSizeDerived() then
-                    parent:InvalidateLayout(true)
-                end
-            else
-                -- Otherwise, propagate it downwards to relative sized children.
-                for k, v in pairs(self:GetChildren()) do
-                    if v:IsSizeRelative() then
-                        v:InvalidateLayout(true)
-                    end
-                end
-            end
-        end
-        
-
-        -- If we're derived size (we size to children), we run the layout after we've derived our size
-        if not self:IsSizeDerived() and not noChildren then
-            self:LayoutChildren()
-        end
-
-        self.LastWidth = w
-        self.LastHeight = h
     end
 
     function PNL.Prototype:LayoutChildren(x, y)
@@ -1102,10 +1172,6 @@ do
             end
         end
 
-        if not self:Compute("Visible") then
-            return
-        end
-
         local parent = self:GetParent()
         local pw, ph = parent and parent:GetWidth(), parent and parent:GetHeight()
         local w, h = self:GetWidth(), self:GetHeight()
@@ -1114,16 +1180,17 @@ do
         if not w or not h then
             return
         end
+        self:Compute("Visible")
 
         local alpha = surface.GetAlphaMultiplier()
         local newAlpha = alpha * (self:Compute("Alpha") / 255)
 
         surface.SetAlphaMultiplier(newAlpha)
-        
-        self.RenderBounds.x = math.max(self.AbsolutePos.x, parent and parent.RenderBounds.x + parent:GetPaddingLeft() or 0)
-        self.RenderBounds.y = math.max(self.AbsolutePos.y, parent and parent.RenderBounds.y + parent:GetPaddingTop() or 0)
-        self.RenderBounds.w = math.min(self.AbsolutePos.x + w, parent and parent.RenderBounds.w - parent.PaddingRight or ScrW())
-        self.RenderBounds.h = math.min(self.AbsolutePos.y + h, parent and parent.RenderBounds.h - parent.PaddingBottom or ScrH())
+
+        self.RenderBounds.x = math.max(self.AbsolutePos.x, (parent and parent.RenderBounds.x + parent:GetPaddingLeft()) or 0)
+        self.RenderBounds.y = math.max(self.AbsolutePos.y, (parent and parent.RenderBounds.y + parent:GetPaddingTop()) or 0)
+        self.RenderBounds.w = math.min(self.AbsolutePos.x + w, (parent and parent.RenderBounds.w - parent.PaddingRight) or ScrW())
+        self.RenderBounds.h = math.min(self.AbsolutePos.y + h, (parent and parent.RenderBounds.h - parent.PaddingBottom) or ScrH())
 
         if IsValid(self.Mesh) then
 
@@ -1142,90 +1209,97 @@ do
                 cam.PopModelMatrix()
 
                 render.SetScissorRect(0, 0, 0, 0, false)
-            surface.SetAlphaMultiplier(alpha)
             
                 
-            if VisualizeLayout:GetBool() then
-                
-                surface.SetDrawColor(Color(128, 255, 255, 225))
-                surface.DrawOutlinedRect(
-                    0, 0,
-                    self:GetOuterWidth(),
-                    self:GetOuterHeight(),
-                    2
-                )
-                
-                -- Margin bounds
-                cam.PushModelMatrix(m, true)
-                    surface.SetDrawColor(Color(255, 255, 0, 225))
+                if VisualizeLayout:GetBool() then
+                    
+                    surface.SetAlphaMultiplier(self:GetVisible() and 1 or 0.05)
+
+                    surface.SetDrawColor(Color(128, 255, 255, 225))
                     surface.DrawOutlinedRect(
                         0, 0,
-                        self:GetWidth(),
-                        self:GetHeight(),
+                        self:GetOuterWidth(),
+                        self:GetOuterHeight(),
                         2
                     )
-
-                    -- Inner bounds
-                    m = Matrix()
-                    m:Translate(Vector(
-                        self:GetPaddingLeft(),
-                        self:GetPaddingTop(),
-                        0
-                    ))
+                    
+                    -- Margin bounds
                     cam.PushModelMatrix(m, true)
-                        surface.SetDrawColor(Color(255, 0, 255, 225))
+                        surface.SetDrawColor(Color(255, 255, 0, 225))
                         surface.DrawOutlinedRect(
                             0, 0,
-                            self:GetInnerWidth(),
-                            self:GetInnerHeight(),
+                            self:GetWidth(),
+                            self:GetHeight(),
                             2
                         )
-                        
 
-                        if self.ContentWidth and self.ContentHeight then
-                            surface.SetDrawColor(Color(0, 255, 0, 100))
-                            local align = self:GetAlign()
-                            
-                            local x, y = 0, 0
-                            if isany(align, 8, 5, 2) then
-                                x = self:GetInnerWidth()/2 - self.ContentWidth/2
-                            elseif isany(align, 9, 6, 3) then
-                                x = self:GetInnerWidth() - self.ContentWidth
-                            end
-
-                            if isany(align, 4, 5, 6) then
-                                y = self:GetInnerHeight()/2 - self.ContentHeight/2
-                            elseif isany(align, 1, 2, 3) then
-                                y = self:GetInnerHeight() - self.ContentHeight
-                            end
-
+                        -- Inner bounds
+                        m = Matrix()
+                        m:Translate(Vector(
+                            self:GetPaddingLeft(),
+                            self:GetPaddingTop(),
+                            0
+                        ))
+                        cam.PushModelMatrix(m, true)
+                            surface.SetDrawColor(Color(255, 0, 255, 225))
                             surface.DrawOutlinedRect(
-                                x,
-                                y,
-                                self.ContentWidth,
-                                self.ContentHeight,
+                                0, 0,
+                                self:GetInnerWidth(),
+                                self:GetInnerHeight(),
                                 2
                             )
-                        end
+                            
+
+                            if self.ContentWidth and self.ContentHeight then
+                                surface.SetDrawColor(Color(0, 255, 0, 100))
+                                local align = self:GetAlign()
+                                
+                                local x, y = 0, 0
+                                if isany(align, 8, 5, 2) then
+                                    x = self:GetInnerWidth()/2 - self.ContentWidth/2
+                                elseif isany(align, 9, 6, 3) then
+                                    x = self:GetInnerWidth() - self.ContentWidth
+                                end
+
+                                if isany(align, 4, 5, 6) then
+                                    y = self:GetInnerHeight()/2 - self.ContentHeight/2
+                                elseif isany(align, 1, 2, 3) then
+                                    y = self:GetInnerHeight() - self.ContentHeight
+                                end
+
+                                surface.DrawOutlinedRect(
+                                    x,
+                                    y,
+                                    self.ContentWidth,
+                                    self.ContentHeight,
+                                    2
+                                )
+                            end
+                        cam.PopModelMatrix()
                     cam.PopModelMatrix()
-                cam.PopModelMatrix()
 
-                if CurTime() - self.LastLayout < 0.5 then
-                    local elapsed = CurTime() - self.LastLayout
-                    local alpha = math.Clamp(1 - (elapsed * 2), 0, 1) * 255
+                    
+                    surface.SetAlphaMultiplier(1)
+                    if CurTime() - self.LastLayout < 0.5 then
+                        local elapsed = CurTime() - self.LastLayout
+                        local alpha = math.Clamp(1 - (elapsed * 2), 0, 1) * 255
 
-                    surface.SetDrawColor(Color(255, 255, 0, alpha))
-                    surface.DrawOutlinedRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight(), 2)
-                    surface.SetDrawColor(Color(255, 0, 0, alpha))
-                    surface.DrawRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight())
+                        surface.SetDrawColor(Color(255, 255, 0, alpha))
+                        surface.DrawOutlinedRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight(), 2)
+                        surface.SetDrawColor(Color(255, 0, 0, alpha))
+                        surface.DrawRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight())
+                    end
                 end
-            end
+            surface.SetAlphaMultiplier(alpha)
         end
     end
 
     function PNL.Prototype:PaintMesh()
         local fill = self:Compute("Fill")
         local material = self:Compute("Material")
+        if isfunction(material) then
+            material = material(self:GetWidth(), self:GetHeight())
+        end
         render.SetMaterial(material)
 
         material:SetVector("$color", fill:ToVector())
@@ -1240,7 +1314,7 @@ do
             
             mat = self:Compute("StrokeMaterial")
             if isfunction(mat) then
-                mat = mat(self, w, h)
+                mat = mat(self:GetWidth(), self:GetHeight())
             end
             
             color = self:Compute("StrokeColor")
@@ -1364,7 +1438,7 @@ do
             local m = Matrix()
             m:Translate(Vector(v:Compute("X") + pl, v:Compute("Y") + pt, 0))
             cam.PushModelMatrix(m, true)
-                v:Paint()
+                xpcall(v.Paint, ErrorNoHaltWithStack, v)
             cam.PopModelMatrix()
         end
     end
@@ -1387,7 +1461,10 @@ do
     end
 
     function PNL.Prototype:GetHost()
-        return self.Host
+        if not self:GetParent() then
+            return self
+        end
+        return self:GetParent():GetHost()
     end
 
     function PNL.Prototype:CursorPos()
@@ -1551,20 +1628,16 @@ do
                 end
                 
                 local duration = v.Duration * progress
-                print("Initial", v.Initial, self, self:GetAlpha())
                 v.Animation = self:Animate(k, v.Initial, duration, 1, v.EaseFunc):Then(function (succ)
                     if not succ then
                         return
                     end
 
-                    v.Initial = nil
-                    print(self, "Initial set to nil")
                     v.Animation = nil
                 end)
             else
+                self:CancelAnimation(k)
                 self:SetProperty(k, v.Initial)
-                print(self, "* Initial set to nil")
-                v.Initial = nil
             end
         end
 
@@ -1575,14 +1648,26 @@ do
     function PNL.Prototype:OnCursorMoved(x, y)
     end
 
-    function PNL.Prototype:OnMousePressed(button)
+    function PNL.Prototype:OnMousePressed(button, src)
+
+        if button == MOUSE_LEFT and self.LeftClick then
+            self:LeftClick()
+            return true
+        elseif button == MOUSE_RIGHT and self.RightClick then
+            self:RightClick()
+            return true
+        elseif button == MOUSE_MIDDLE and self.MiddleClick then
+            self:MiddleClick()
+            return true
+        end
+
         local p = self:GetParent()
         if p then
             p:OnMousePressed(button, self)
         end
     end
 
-    function PNL.Prototype:OnMouseReleased(button)
+    function PNL.Prototype:OnMouseReleased(button, src)
         local p = self:GetParent()
         if p then
             p:OnMouseReleased(button, self)
@@ -1629,8 +1714,25 @@ do
         self:SetTextColor(color_white)
     end
 
+    function PanelHost.Prototype:GetHost()
+        return self
+    end 
+    
     function PanelHost.Prototype:PaintChildren()
-        base(self, "PaintChildren")
+        local children = self:GetChildren()
+
+        local pl, pt = self:Compute("PaddingLeft"), self:Compute("PaddingTop")
+        for k, v in pairs(children) do
+            if not IsValid(v) then
+                children[k] = nil
+                continue
+            end
+            local m = Matrix()
+            m:Translate(Vector(v:Compute("X") + pl, v:Compute("Y") + pt, 0))
+            cam.PushModelMatrix(m, true)
+                xpcall(v.Paint, ErrorNoHaltWithStack, v, true)
+            cam.PopModelMatrix()
+        end
     end
 
     function PanelHost.Prototype:OnCursorEntered()
@@ -1642,17 +1744,12 @@ do
 
         local old = self:GetHoveredPanel()
 
-        -- Quick escape if we're still in the same hovered panel
-        local hover = old and old:TestHover(x, y)
-
-        if not hover then
-            for i=#self.Children, 1, -1 do
-                local v = self.Children[i]
-                local hovered = v:TestHover(x, y)
-                if hovered then
-                    hover = hovered
-                    break
-                end
+        for i=#self.Children, 1, -1 do
+            local v = self.Children[i]
+            local hovered = v:TestHover(x, y)
+            if hovered then
+                hover = hovered
+                break
             end
         end
 
@@ -1734,6 +1831,164 @@ do
         --if x and y then
             --surface.DrawCircle(x, y, 5, Color(255, 0, 0, 255))
         --end
+    end
+end
+
+-- Materials, shaders and helpers
+do
+    local dp = 3
+
+    function RoundedBox(w, h, tl, tr, br, bl, sz)
+        if not tr then
+            tr = tl
+            br = tl
+            bl = tl
+        end
+
+        local x, y = 0, 0
+        local t = {}
+        local idx = 1
+
+        local function append(pt)
+            t[idx] = pt.x
+            t[idx + 1] = pt.y
+            idx = idx + 2
+        end
+
+        sz = sz or 8
+
+        -- top-left corner
+        if tl > 0 then
+            table.insert(t, { x = x, y = y + tl })
+            for i = 1, sz do
+                local ang = 90 / sz * i
+                local x2 = math.cos(math.rad(ang)) * tl
+                local y2 = math.sin(math.rad(ang)) * tl
+                append({ x = x + tl - x2, y = y + tl - y2 })
+            end
+        else
+            append({ x = x, y = y })  -- sharp corner
+        end
+
+        -- top-right corner
+        if tr > 0 then
+            append({ x = x + w - tr, y = y })
+            for i = 1, sz do
+                local ang = 90 + 90 / sz * i
+                local x2 = math.cos(math.rad(ang)) * tr
+                local y2 = math.sin(math.rad(ang)) * tr
+                append({ x = x + w - tr - x2, y = y + tr - y2 })
+            end
+        else
+            append({ x = x + w, y = y }) -- sharp corner
+        end
+
+        -- bottom-right corner
+        if br > 0 then
+            append({ x = x + w, y = y + h - br })
+            for i = 1, sz do
+                local ang = 0 + 90 / sz * i
+                local x2 = math.cos(math.rad(ang)) * br
+                local y2 = math.sin(math.rad(ang)) * br
+                append({ x = x + w - br + x2, y = y + h - br + y2 })
+            end
+        else
+            append({ x = x + w, y = y + h }) -- sharp corner
+        end
+
+        -- bottom-left corner
+        if bl > 0 then
+            append({ x = x + bl, y = y + h })
+            for i = 1, sz do
+                local ang = 90 + 90 / sz * i
+                local x2 = math.cos(math.rad(ang)) * bl
+                local y2 = math.sin(math.rad(ang)) * bl
+                append({ x = x + bl + x2, y = y + h - bl + y2 })
+            end
+        else
+            append({ x = x, y = y + h }) -- sharp corner
+        end
+
+        return t
+    end
+
+    local Radial = Material("sstrp25/shaders/radialgradient")
+    function RadialGradient(color1, offset1, color2, offset2, color3)
+        if not offset1 then
+            offset1 = 0.25
+            color2 = color1
+        end
+
+        if not offset2 then
+            offset2 = 0.75
+            color3 = color2
+        end
+
+        return function (w, h) 
+
+            local alpha = surface.GetAlphaMultiplier()
+
+            Radial:SetFloat("$c0_x", math.Round(color1.r / 255, dp))
+            Radial:SetFloat("$c0_y", math.Round(color1.g / 255, dp))
+            Radial:SetFloat("$c0_z", math.Round(color1.b / 255, dp))
+            Radial:SetFloat("$c0_w", math.Round((color1.a / 255) * alpha, dp))
+            
+            Radial:SetFloat("$c1_x", math.Round(color2.r / 255, dp))
+            Radial:SetFloat("$c1_y", math.Round(color2.g / 255, dp))
+            Radial:SetFloat("$c1_z", math.Round(color2.b / 255, dp))
+            Radial:SetFloat("$c1_w", math.Round((color2.a / 255) * alpha, dp))
+
+            Radial:SetFloat("$c2_x", math.Round(color3.r / 255, dp))
+            Radial:SetFloat("$c2_y", math.Round(color3.g / 255, dp))
+            Radial:SetFloat("$c2_z", math.Round(color3.b / 255, dp))
+            Radial:SetFloat("$c2_w", math.Round((color3.a / 255) * alpha, dp))
+            
+            Radial:SetFloat("$c3_x", math.Round(offset1, dp))
+            Radial:SetFloat("$c3_y", math.Round(offset2, dp))
+
+            return Radial
+        end
+    end
+
+    local mat = Material("sstrp25/shaders/lineargradientv2")
+    function LinearGradient(col1, off1, col3, rotDeg)
+        
+        local colA = col1
+        local colB = col3 or colA
+        
+
+        local alpha = surface.GetAlphaMultiplier()
+        colA.a = colA.a * alpha
+        colB.a = colB.a * alpha
+
+        local rad = math.rad((rotDeg or 0) + LG_OFFSET)
+
+        return function (w, h)
+            -- aspect-correct the direction in UV space
+            local ax = w / math.max(h, 1)
+            local dx, dy = math.Round(math.cos(rad), 2), math.Round(math.sin(rad), 2)
+            local len = math.sqrt(dx*dx + dy*dy)
+            if len > 0 then dx, dy = dx/len, dy/len end
+
+            -- colours
+            local alpha = surface.GetAlphaMultiplier()
+            mat:SetFloat("$c0_x", colA.r/255) 
+            mat:SetFloat("$c0_y", colA.g/255)
+            mat:SetFloat("$c0_z", colA.b/255) 
+            mat:SetFloat("$c0_w", (colA.a/255) * alpha)
+            mat:SetFloat("$c1_x", colB.r/255) 
+            mat:SetFloat("$c1_y", colB.g/255)
+            mat:SetFloat("$c1_z", colB.b/255) 
+            mat:SetFloat("$c1_w", (colB.a/255) * alpha)
+
+            -- pack direction (xy); the shader ignores z/w now
+            mat:SetFloat("$c3_x", dx)
+            mat:SetFloat("$c3_y", dy)
+            mat:SetFloat("$c3_z", off1)
+            mat:SetFloat("$c3_w", off1)
+
+            return mat
+        end
     end
 end
 
@@ -1862,29 +2117,198 @@ end
 -- Overlay
 local Overlay = Interface.Register("Overlay", PNL)
 do
+    Overlay:CreateProperty("ShowOnHover", Type.Boolean, { Default = true })
     function Overlay.Prototype:Initialize()
         base(self, "Initialize")
 
         self:SetAbsolute(true)
         self:SetVisible(false)
     end
+    
+    function Overlay.Prototype:Paint(asOverlay)
+        local m = Matrix()
+        local parent = self:GetParent()
+        m:Translate(parent.AbsolutePos)
+        m:Translate(Vector(self:Compute("X"), self:Compute("Y"), 0))
 
-    function Overlay.Prototype:OnPropertyChanged(key, new, old)
-        if key == "Visible" then
-            if new ~= old then
-                if new then
-                    self:Open()
+        cam.PushModelMatrix(m)
+
+            self.AbsolutePos = cam.GetModelMatrix():GetTranslation()
+            self.AbsolutePos.x = self.AbsolutePos.x + self:GetMarginLeft()
+            self.AbsolutePos.y = self.AbsolutePos.y + self:GetMarginTop()
+
+            -- Handle animations first.
+            for k, v in pairs(self.Animations) do
+                local p = (CurTime() - v.Start) / v.Duration
+                if p >= 1 then
+                    self:SetProperty(k, v.To)
+                    
+                    if isany(k, "Width", "Height") then
+                        self:InvalidateLayout()
+                    end
+
+                    if v.Repetitions > 1 then
+                        v.Repetitions = v.Repetitions - 1
+                        v.Start = CurTime()
+                        v.From, v.To = v.To, v.From
+                    else
+                        self.Animations[k] = nil
+                        v:Complete(true)
+                    end
                 else
-                    self:Close()
+                    local from = v.From
+                    local to = v.To
+                    local val
+                    
+                    if istable(from) then
+                        val = table.Copy(from)
+
+                        for k2, v2 in pairs(from) do
+                            if not isnumber(v2) then
+                                continue
+                            end
+                            val[k2] = v2 + (to[k2] - v2) * v.EaseFunc(p)
+                        end
+                    else
+                        val = v.From + (v.To - v.From) * v.EaseFunc(p)
+                    end
+
+                    self:SetProperty(k, val)
+                end
+
+                if isany(k, "Width", "Height") then
+                    self:InvalidateLayout()
                 end
             end
-        end
 
-        return base(self, "OnPropertyChanged", key, new, old)
+            local parent = self:GetParent()
+            local pw, ph = parent and parent:GetWidth(), parent and parent:GetHeight()
+            local w, h = self:GetWidth(), self:GetHeight()
+            local x, y = self:GetX(), self:GetY()
+
+            if not w or not h then
+                return
+            end
+            self:Compute("Visible")
+
+            local alpha = surface.GetAlphaMultiplier()
+            local newAlpha = alpha * (self:Compute("Alpha") / 255)
+
+            surface.SetAlphaMultiplier(newAlpha)
+
+            self.RenderBounds.x = self.AbsolutePos.x --, (parent and parent.RenderBounds.x + parent:GetPaddingLeft()) or 0)
+            self.RenderBounds.y = self.AbsolutePos.y -- math.max(self.AbsolutePos.y, (parent and parent.RenderBounds.y + parent:GetPaddingTop()) or 0)
+            self.RenderBounds.w = self.AbsolutePos.x + w --, (parent and parent.RenderBounds.w - parent.PaddingRight) or ScrW())
+            self.RenderBounds.h = self.AbsolutePos.y + h --, (parent and parent.RenderBounds.h - parent.PaddingBottom) or ScrH())
+
+            if asOverlay and IsValid(self.Mesh) then
+
+                if self:GetCull() then
+                    self:SetScissorRect()
+                end
+
+                    local m = Matrix()
+                    m:Translate(Vector(self:GetMarginLeft(),  self:GetMarginTop(), 0))
+
+                    cam.PushModelMatrix(m, true)
+                        self:PaintMesh()
+                        self:PaintStroke()
+
+                        self:PaintChildren()
+                    cam.PopModelMatrix()
+
+                    render.SetScissorRect(0, 0, 0, 0, false)
+                
+                    
+                    if VisualizeLayout:GetBool() then
+                        
+                        surface.SetAlphaMultiplier(self:GetVisible() and 1 or 0.05)
+
+                        surface.SetDrawColor(Color(128, 255, 255, 225))
+                        surface.DrawOutlinedRect(
+                            0, 0,
+                            self:GetOuterWidth(),
+                            self:GetOuterHeight(),
+                            2
+                        )
+                        
+                        -- Margin bounds
+                        cam.PushModelMatrix(m, true)
+                            surface.SetDrawColor(Color(255, 255, 0, 225))
+                            surface.DrawOutlinedRect(
+                                0, 0,
+                                self:GetWidth(),
+                                self:GetHeight(),
+                                2
+                            )
+
+                            -- Inner bounds
+                            m = Matrix()
+                            m:Translate(Vector(
+                                self:GetPaddingLeft(),
+                                self:GetPaddingTop(),
+                                0
+                            ))
+                            cam.PushModelMatrix(m, true)
+                                surface.SetDrawColor(Color(255, 0, 255, 225))
+                                surface.DrawOutlinedRect(
+                                    0, 0,
+                                    self:GetInnerWidth(),
+                                    self:GetInnerHeight(),
+                                    2
+                                )
+                                
+
+                                if self.ContentWidth and self.ContentHeight then
+                                    surface.SetDrawColor(Color(0, 255, 0, 100))
+                                    local align = self:GetAlign()
+                                    
+                                    local x, y = 0, 0
+                                    if isany(align, 8, 5, 2) then
+                                        x = self:GetInnerWidth()/2 - self.ContentWidth/2
+                                    elseif isany(align, 9, 6, 3) then
+                                        x = self:GetInnerWidth() - self.ContentWidth
+                                    end
+
+                                    if isany(align, 4, 5, 6) then
+                                        y = self:GetInnerHeight()/2 - self.ContentHeight/2
+                                    elseif isany(align, 1, 2, 3) then
+                                        y = self:GetInnerHeight() - self.ContentHeight
+                                    end
+
+                                    surface.DrawOutlinedRect(
+                                        x,
+                                        y,
+                                        self.ContentWidth,
+                                        self.ContentHeight,
+                                        2
+                                    )
+                                end
+                            cam.PopModelMatrix()
+                        cam.PopModelMatrix()
+
+                        
+                        surface.SetAlphaMultiplier(1)
+                        if CurTime() - self.LastLayout < 0.5 then
+                            local elapsed = CurTime() - self.LastLayout
+                            local alpha = math.Clamp(1 - (elapsed * 2), 0, 1) * 255
+
+                            surface.SetDrawColor(Color(255, 255, 0, alpha))
+                            surface.DrawOutlinedRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight(), 2)
+                            surface.SetDrawColor(Color(255, 0, 0, alpha))
+                            surface.DrawRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight())
+                        end
+                    end
+                surface.SetAlphaMultiplier(alpha)
+            end
+        cam.PopModelMatrix()
     end
 
     function Overlay.Prototype:Open()
-        self:CreatePanel()
+        if not self:IsOpen() then
+            self:SetVisible(true)
+            table.insert(self:GetHost():GetChildren(), self)
+        end
     end
 
     function Overlay.Prototype:CreatePanel()
@@ -1892,15 +2316,33 @@ do
             return
         end
         
-        self.Panel = Interface.Create("Panel", self.Host)
+        self.Panel = Interface.Create("Panel", self:GetHost())
+        local me = self
         local x, y = self:LocalToScreen(0, 0)
-        self.Panel:SetX(x)
-        self.Panel:SetY(y)
-        self.Panel:SetWidth(self:GetWidth())
-        self.Panel:SetHeight(self:GetHeight())
-        self.Panel:SetFill(Color(0, 0, 0, 255))
         
+        self.Panel:SetComputed("X", function () local x, y = me:LocalToScreen(0, 0) return x end)
+        self.Panel:SetComputed("Y", function () local x, y = me:LocalToScreen(0, 0) return y end)
+        self.Panel:SetComputed("Width", function () return me:GetWidth() end)
+        self.Panel:SetComputed("Height", function () return me:GetHeight() end)
+        self.Panel:SetComputed("Fill", function () return me:Compute("Fill") end)
+
         self.Panel.Children = self.Children 
+        return self.Panel
+    end
+
+    function Overlay.Prototype:IsOpen()
+        return self:GetVisible()
+    end
+
+    function Overlay.Prototype:Toggle()
+        if self:IsOpen() then
+            self:Close()
+        else
+            self:Open()
+        end
+    end
+
+    function Overlay.Prototype:GetPanel()
         return self.Panel
     end
 
@@ -1912,14 +2354,21 @@ do
     end
 
     function Overlay.Prototype:Close()
-        self:RemovePanel()
+        self:SetVisible(false)
+        table.RemoveByValue(self:GetHost():GetChildren(), self)
     end
 
     function Overlay.Prototype:StartHover(src, last)
-        self:Open()
+        if self:Compute("ShowOnHover") then
+            self:Open()
+        end
     end
 
     function Overlay.Prototype:EndHover(src, new)
+        if not self:Compute("ShowOnHover") then
+            return
+        end
+
         local p = new
         while p do
             -- If it's the same panel or one of our children, we don't close the overlay since we're effectively still hovered.
@@ -1929,8 +2378,12 @@ do
             p = p:GetParent()
         end
 
-        print(self:GetHost():GetHoveredPanel(), new)
         self:Close()
+    end
+
+    function Overlay.Prototype:OnDisposed()
+        base(self, "OnDisposed")
+        table.RemoveByValue(self:GetHost():GetChildren(), self)
     end
 end
 
@@ -1988,13 +2441,67 @@ end
 
 -- XML
 do
+    local parser = {}
+    function parser:starttag(el, start, fin)
+        local vguiElement = {}
+        vguiElement.Tag = el.name
+        vguiElement.Start = start
+        vguiElement.Finish = fin
+        vguiElement.Attributes = el.attrs
+        vguiElement.Children = {}
+        vguiElement.Parent = self.top
+
+        local current = self.stack[#self.stack]
+        if current then
+            table.insert(current.Children, vguiElement)
+        end
+
+        table.insert(self.stack, vguiElement)
+        self.top = vguiElement
+    end
+
+    function parser:endtag(el, s)        
+        -- Create children here.
+        table.remove(self.stack, #self.stack)
+        self.top = self.stack[#self.stack]
+    end
+
+    function parser:text(text)
+        local cp = vgui.GetControlTable(self.top.Tag)
+        if cp and cp.ParseXMLText then
+            self.top.Attributes = self.top.Attributes or {}
+            cp:ParseXMLText(self.top, text)
+        else
+            local el = { name = "Text", attrs = { { Name = "Value", Value = string.Trim(text) } } }
+            self:starttag(el)
+            self:endtag(el)
+        end
+    end
+    parser.__index = parser
+
+
+    
+    local function SmartCompileString(str, name, key)
+        str = string.Trim(str)
+        if istable(name) then
+            name = string.format("%s[%s][%s]", name:GetType():GetName(), name:GetName() or "", key)
+        end
+
+        if string.StartsWith(str, "function ") or string.StartsWith(str, "function(") then
+            return CompileString("return " .. str, name, true)()
+        else
+            return CompileString("return " .. str, name, true)
+        end
+    end
+
+
     function Interface.ParseXML(xml)
         local p = setmetatable({}, parser)
         p.root = {
             Children = {}
         }
 
-        p.stack = {p.root}
+        p.stack = { p.root }
         p.top = p.root
         local eval = xml2lua.parser(p, {
             --Indicates if whitespaces should be striped or not
@@ -2027,121 +2534,171 @@ do
             end
         })
 
-        print(xml)
         eval:parse(xml)
+
         return p.top
+    end
+
+    local function SetProp(pnl, key, value)
+        local setter = pnl["Set" .. key]
+        if setter then
+            setter(pnl, value)
+        else
+            pnl[key] = value
+        end
+    end
+
+    hook.Add("Interface.XMLParseNamespace", function (self, namespace, key, value)
+        if namespace == "Computed" then
+            self:SetComputed(key, SmartCompileString(value, self, key))
+            return false
+        elseif namespace == "Hover" then
+            local value, duration, easeFunc = unpack(string.Split(value, ","))
+            
+            assert(value, "Hover properties must have a value: " .. key)
+            duration = tonumber(duration)
+            if easeFunc then
+                easeFunc = math.ease[string.Trim(easeFunc)]
+            end
+
+            local prop = self:GetType():GetProperty(key)
+            value = prop.Type:Parse(value)
+
+            self:SetHover(key, value, duration, easeFunc)
+
+            return false
+        elseif isany(namespace, "Func", "Function") then
+            local func = SmartCompileString(value, self, key)
+            if not isfunction(func) then
+                error(string.format("Parsed function for '%s' is not a function (got %s)", key, type(func)))
+            end
+
+            self[key] = func
+            return false
+        end
+
+        local typ = Type.GetByName(namespace)
+        if typ then
+            local parsed = typ:Parse(value)
+            return true, parsed
+        end
+    end)
+        
+    function Interface.CreateFromNode(parent, node)    
+        local pnl = Interface.Create(node.Tag, parent)
+
+        if node.Attributes then
+            ApplyProperties(pnl, node)
+        end
+
+        for k, v in pairs(node.Children) do
+            Interface.CreateFromNode(pnl, v)
+        end
+
+        return pnl
+    end
+
+    function Interface.CreateFromXML(parent, xml)
+        assert(xml, "XML string cannot be nil")
+        local parsed = Interface.ParseXML(xml)
+
+        local out = {}
+        for k, v in pairs(parsed.Children) do
+            local el = Interface.CreateFromNode(parent, v)
+            if el then
+                table.insert(out, el)
+            end
+        end
+
+        return unpack(out)
+    end
+
+    function Interface.RegisterFromXML(name, xml)
+        assert(name, "Name cannot be nil")
+        assert(xml, "XML string cannot be nil")
+        local parsed = Interface.ParseXML(xml)
+        
+        assert(#parsed.Children == 1, "Root XML element must have exactly one child")
+        parsed = parsed.Children[1]
+
+        local out = Interface.Register(name, parsed.Tag)
+        out.XML = parsed
+        return out
     end
 end
 
--- Testing
-p = Interface.Create("Panel")
-    :SetName("Test")
-    :SetX(function (self)
-        local pw = self:GetParent():GetWidth()
-        return pw / 2 - self:GetOuterWidth() / 2
-    end)
-    :SetY(function (self)
-        local ph = self:GetParent():GetHeight()
-        return ph / 2 - self:GetOuterHeight() / 2
-    end)
-    :SetAlign(4)
-    :SetDirection(RIGHT)
+Interface.RegisterFromXML("TestInside", [[
+    <Panel Align="1" Direction="RIGHT" Gap="16">
+        <Panel Name="Left" Width="128" Height="128" Fill="255 0 255 255" />
+        <Panel Name="Mid" Width="Grow" Height="128" Padding="16" Hoverable="true" Fill="255 255 255 255" Alpha="32" Hover:Alpha="255, 0.25" Align="5"
+            Func:LeftClick="function (self, src)
+                ClickSound()
+                self:Find('Overlay'):Toggle()
+                return true
+            end"
+        >
+            <Panel Name="Grandchild" Width="64" Height="64" Fill="255 255 0 255" Hoverable="true">
+            </Panel>
+            <Overlay 
+                Name="Overlay"
+                :Y="self:GetParent():GetHeight()" 
+                :Width="self:GetParent():GetWidth()"
+                :Shape="RoundedBox(self:GetWidth(), self:GetHeight(), 0, 0, 16, 16)"
+                Fill="0 0 0 128" 
+                Height="128"
+                ShowOnHover="false"
+                MarginBottom="16"
+                Hoverable="true"
+                Align="8"
+                Direction="Down"
+            >
+                <Panel Width="100%" Fill="255 0 0 128" Hoverable="true" Hover:Fill="255 255 255 128, 0.2">
+                    <Text Value="Test" />
+                </Panel>
+                <Panel Width="100%" Fill="255 0 0 128" Hoverable="true" Hover:Fill="255 255 255 128, 0.2">
+                    <Text Value="Test" />
+                </Panel>
+                <Panel Width="100%" Fill="255 0 0 128" Hoverable="true" Hover:Fill="255 255 255 128, 0.2">
+                    <Text Value="Test" />
+                </Panel>
+            </Overlay>
+        </Panel>
+        <Panel Name="Right" Width="128" Height="128" Fill="0 255 255 255" />
+    </Panel>
+]])
 
-    :SetCursor("hand")
-    :SetWidth(800)
-    :SetHeight(600)
-    :SetMargin(16)
-    :SetPadding(32)
-    :SetShape(function (self)
-        return RoundedBox(self:GetWidth(), self:GetHeight(), 16, 16, 16, 16) 
-    end)
-    :SetMaterial(RadialGradient(
-        Color(0, 14, 30, IsHovered and 255 or 128),
-        0.3,
-        Color(0, 14, 30, IsHovered and 255 or 128),
-        0.9,
-        Color(0, 3, 10, IsHovered and 255 or 128)
-    ))
-    :SetHoverable(true)
-    :SetAlpha(225)
-    :SetHover("Alpha", 255, 0.2)
-    :SetStroke(8)
-    :SetStrokeMaterial(LinearGradient(
-        Color(255, 60, 60, 192),
-        1,
-        Color(40, 42, 46, 0),
-        90
-    ))
-    :SetWrap(true)
-    :SetGap(16)
-    :Add()
-        :SetName("Left")
-        :SetWidth(128)
-        :SetHeight(128)
-        :SetFill(Color(255, 0, 255))
-        :Finish()
-    :Add()
-        :SetName("Mid")
-        :SetWidth("Grow")
-        :SetHeight(128)
-        :SetPadding(16)
-        :SetHoverable(true)
-        :SetFill(Color(255, 255, 255, 192))
-        :SetHover("Fill", Color(255, 255, 255, 255), 0.25)
-        :SetAlign(5)
-        :Add("Panel")
-            :SetName("Grandchild")
-            :SetHoverable(true)
-            :SetWidth(64)
-            :SetHeight(64)
-            :SetFill(Color(255, 255, 0))
-            :Finish()
-        :Add("Overlay", "Overlay")
-            :SetX(function (self)
-                local parent = self:GetParent()
-                return -parent:GetPaddingLeft()
-            end)
-            :SetY(function (self)
-                local parent = self:GetParent()
-                return parent:GetHeight() - parent:GetPaddingTop()
-            end)
-            :SetWidth(function (self)
-                local parent = self:GetParent()
-                return parent:GetWidth()
-            end)
-            :SetHeight("50%")
-            :SetFill(Color(255, 0, 0, 255))
-            :SetAlpha(0)
-            :SetField("Open", function (self)
-                local p = self:CreatePanel()
-                if p:GetAlpha() == 255 then
-                    p:SetAlpha(0)
-                end
-                p:AlphaTo(255, 0.5)
-            end)
-            :SetField("Close", function (self)
-                self.Panel:AlphaTo(0, 0.5):Then(function ()
-                    self:RemovePanel()
-                end)
-            end)
-            :Finish()
-        :Finish()
-    :Add()
-        :SetName("Right")
-        :SetWidth(128)
-        :SetHeight(128)
-        :SetFill(Color(0, 255, 255))
-        :Finish()
-    :Add()
-        :SetName("Abs")
-        :SetAbsolute(true)
-        :SetX(16)
-        :SetY(16)
-        :SetWidth(64)
-        :SetHeight(64)
-        :SetFill(Color(255, 255, 255))
-        :Finish()   
-
-
-
---TBL = Interface.ParseXML(string.Trim([[<Rect Width="100%"><Rect /></Rect>]]))
+p = Interface.CreateFromXML(nil, [[
+    <Panel 
+        Name="Test" 
+        :X="self:GetParent():GetWidth() / 2 - self:GetOuterWidth() / 2"
+        :Y="self:GetParent():GetHeight() / 2 - self:GetOuterHeight() / 2"
+        :Shape="RoundedBox(self:GetWidth(), self:GetHeight(), 64, 64, 64, 64)"
+        :Material="RadialGradient(
+            Color(0, 14, 30, 255),
+            0.3,
+            Color(0, 14, 30, 255),
+            0.9,
+            Color(0, 3, 10, 255)
+        )"
+        Fill="255 255 255 255"
+        Align="5" 
+        Direction="RIGHT" 
+        Cursor="hand" 
+        Width="800" 
+        Height="600" 
+        Margin="16"
+        Padding="32" 
+        Hoverable="true" 
+        Alpha="225" 
+        Stroke="8"
+        :StrokeMaterial="LinearGradient(
+            Color(255, 60, 60, 192),
+            1,
+            Color(40, 42, 46, 0),
+            90
+        )"
+        Gap="16"
+    >
+        <TestInside Width="100%" Height="100%" />
+    </Panel>
+]])

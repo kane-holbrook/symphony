@@ -223,6 +223,9 @@ end
 
 function stringex.SubstringBefore(text, delimiter)
     local s = string.Split(text, delimiter)
+    if #s == 1 then
+        return nil
+    end
     return s[1]
 end
 
