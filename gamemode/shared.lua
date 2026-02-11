@@ -43,6 +43,12 @@ include("impl/usergroups.lua")
 include("impl/users.lua")
 include("impl/commands.lua")
 
+include("interface/helpers.lua")
+include("interface/text.lua")
+include("interface/overlay.lua")
+include("interface/textbox.lua")
+
+
 
 local PLY = FindMetaTable("Player")
 function PLY:IsAdmin()

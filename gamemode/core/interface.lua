@@ -22,8 +22,10 @@ do
     function Interface.Create(t, parent)
         if isstring(t) then
             t = "Interface." .. t
+            assert(Type.GetByName(t), "No such interface type: " .. t)
         end
 
+        
         local el = Type.New(t)
         parent = parent or Interface.BasePanel
         el:SetParent(parent)
@@ -103,25 +105,45 @@ do
     function Interface.GetHoveredPanel()
         return Interface.GetBasePanel().HoveredPanel
     end
+
+    function Interface.GetFocusedPanel()
+        return Interface.GetBasePanel().FocusedPanel
+    end
 end
 
 local function ApplyProperties(pnl, node)
     local propertyMap = pnl:GetType():GetPropertiesMap()
-    for _, t in pairs(node.Attributes) do
+    for i, t in pairs(node.Attributes) do
         local k = t.Name
         local v = t.Value
 
-        local namespace = stringex.SubstringBefore(k, ":")
-        if namespace then
-            k = string.sub(k, #namespace + 2)
-            
-            if namespace == "" then
-                namespace = "Computed"
+        local namespace
+        if string.StartsWith(k, ":") then
+            namespace = "Computed"
+            k = string.sub(k, 2)
+        else
+            namespace = stringex.SubstringBeforeLast(k, ":")
+            if not stringex.IsBlank(namespace) then
+                k = string.sub(k, #namespace + 2)
             end
-
+        end
+        
+        if not stringex.IsBlank(namespace) then
             local cont, result = hook.Run("Interface.XMLParseNamespace", pnl, namespace, k, v)
             if cont == nil then
-                ErrorNoHalt(string.format("Failed to parse XML attribute '%s' on element <%s>: unrecognized namespace '%s'\n", t.Name, node.Tag, namespace))
+                -- It's a state.
+                local value, duration, easeFunc = unpack(string.Split(v, ","))
+                assert(value, "State properties must have a value: " .. k)
+                duration = tonumber(duration)
+                if easeFunc then
+                    easeFunc = math.ease[string.Trim(easeFunc)]
+                end
+
+                local prop = pnl:GetType():GetProperty(k)
+                value = prop.Type:Parse(value)
+
+                pnl:SetStateProperty(namespace, k, value, duration, easeFunc, i)
+                cont = false
             end
 
             if cont == false then
@@ -144,6 +166,20 @@ end
 -- Panel
 local PNL = Type.Register("Interface.Panel")
 do
+    hook.Add("Type.CreateProperty", function (type, name, property, options)
+        if not Type.Is(type, PNL) then
+            return
+        end
+
+        if not options.NoSetter then
+            type.Prototype["Set" .. name] = function (self, value, ...)
+                self:SetProperty(name, value, ...)
+                self.StateProperties._default[name] = self:GetProperty(name)
+                return self
+            end
+        end
+    end)
+
     PNL:CreateProperty("Name", Type.String)
     PNL:CreateProperty("Width", Type.Number, { Default = 0 })
     PNL:CreateProperty("Height", Type.Number, { Default = 0 })
@@ -159,7 +195,9 @@ do
     PNL:CreateProperty("FontWeight", Type.Number)
     PNL:CreateProperty("TextColor", Type.Color)
     PNL:CreateProperty("Hoverable", Type.Bool, { Default = false })
+    PNL:CreateProperty("Focusable", Type.Bool, { Default = false })
     PNL:CreateProperty("Hovered", Type.Bool, { Default = false })
+    PNL:CreateProperty("Focused", Type.Bool, { Default = false })
     PNL:CreateProperty("Shape", Type.Table)
     PNL:CreateProperty("Visible", Type.Bool, { Default = true })
     PNL:CreateProperty("Cull", Type.Bool, { Default = true })
@@ -192,17 +230,186 @@ do
         self.FuncEnv = setmetatable({}, { __index = _G })
         self.RenderBounds = {}
         self.HoverProperties = {}
+        self.Class = string.sub(self:GetType():GetName(), 11)
+        self.States = {}
+        self.StateProperties = {}
+        self.StatePropertyPriorities = {}
+
         self.Userdata = GC(function ()
             if not self:IsDisposed() then
                 self:Dispose()
             end
         end)
+        
+        self.StateProperties._default = {}
+        for k, v in pairs(self:GetProperties()) do
+            self.StateProperties._default[k] = v
+        end
 
         self:SetShape()
         self:SetWidth()
         self:SetHeight()
+
         self:InitXML()
         self:InvalidateLayout(nil, true)
+    end
+
+    function PNL.Prototype:SetStateProperty(state, property, value, duration, ease, priority)
+        self.StateProperties[state] = self.StateProperties[state] or {}
+        local state = self.StateProperties[state]
+
+        if value == nil then
+            state[property] = nil
+        else
+            state[property] = {
+                Value = value,
+                Duration = duration,
+                EaseFunc = ease,
+                Priority = priority or 0
+            }
+        end
+        return self
+    end
+
+    function PNL.Prototype:SetState(state, bool)
+        if bool then
+            self:AddState(state)
+        else
+            self:RemoveState(state)
+        end
+    end
+
+    function PNL.Prototype:SetStates(str)
+        for k, v in pairs(string.Split(str, " ")) do
+            self:AddState(v)
+        end
+    end
+
+    function PNL.Prototype:GetStateProperties(state)
+        local out = {}
+
+        if self.StateProperties[state] then
+            for k, v in pairs(self.StateProperties[state]) do
+                out[k] = v
+            end
+        end
+    
+        return out
+    end
+
+    function PNL.Prototype:ApplyState(src, state, apply)
+        local states = self:GetStateProperties(state)
+        if apply then
+            for k, v in pairs(states) do
+                local prio = self.StatePropertyPriorities[k] or 0
+                if prio > v.Priority then
+                    -- Do nothing if a higher priority state has already set this property
+                    continue
+                end
+
+                self.StatePropertyPriorities[k] = v.Priority
+
+                -- If duration is specified, animate the change
+                if v.Duration then
+                    self:Animate(k, v.Value, v.Duration, 1, v.EaseFunc)
+                else
+                    -- Otherwise, set immediately
+                    self:SetProperty(k, v.Value)
+                    self.StatePropertyPriorities[k] = v.Priority
+                end
+            end
+        else
+            for k, v in pairs(states) do
+                local prio = self.StatePropertyPriorities[k] or 0
+                if prio > v.Priority then
+                    -- Do nothing if a higher priority state has already set this property
+                    continue
+                end
+
+                local targetValue, prio2 = self.StateProperties._default[k], -1
+                for _, v2 in pairs(self:GetStates()) do
+                    local p = self:GetStateProperties(v2)[k]
+                    if not p then
+                        continue
+                    end
+
+                    if v == state or v == "_default" then
+                        -- Skip the state we're removing
+                        continue
+                    end
+
+                    if p.Priority > prio2 then
+                        targetValue = p.Value
+                        prio2 = p.Priority
+                    end
+                end
+
+                -- If duration is specified, animate the change
+                if v.Duration then
+                    self:Animate(k, targetValue, v.Duration, 1, v.EaseFunc)
+                else
+                    -- Otherwise, set immediately
+                    self:SetProperty(k, targetValue)
+                end
+                self.StatePropertyPriorities[k] = prio2
+            end
+        end
+
+        self:OnStateApplied(src, state, apply)
+
+        self:InvokeChildren("ApplyState", src, src == self and "Parent:" .. state or state, apply)
+    end
+
+    function PNL.Prototype:OnStateApplied(src, state, apply)
+    end
+
+    function PNL.Prototype:AddState(state)
+        if table.HasValue(self.States, state) then
+            return
+        end
+
+        table.insert(self.States, state)
+        self:ApplyState(self, state, true)
+    end
+
+    function PNL.Prototype:RemoveState(state)
+        for k, v in pairs(self.States) do
+            if v == state then
+                table.remove(self.States, k)
+                self:ApplyState(self, state, false)
+                return
+            end
+        end
+        
+    end
+
+    function PNL.Prototype:GetStates()
+        local out = {}
+        local p = self:GetParent()
+        if p then
+            local parentStates = p:GetStates()
+            for k, v in pairs(parentStates) do
+                if not string.StartsWith(v, "Parent:") then
+                    v = "Parent:" .. v
+                end
+                out[k] = v
+            end
+        end
+
+        for k, v in pairs(self.States) do
+            if string.StartsWith(v, "-") then
+                v = string.sub(v, 2)
+                table.RemoveByValue(out, v)
+            else
+                out[k] = v
+            end
+        end
+
+        return out
+    end
+
+    function PNL.Prototype:HasState(state)
+        return table.HasValue(self:GetStates(), state)
     end
 
     function PNL.Prototype:DebugMessage(...)
@@ -249,6 +456,7 @@ do
 
     function PNL.Prototype:SetAlign(align)
         self:SetProperty("Align", align)
+        self.StateProperties._default.Align = align
         self:InvalidateLayout(nil, true, nil, true)
         return self
     end
@@ -269,12 +477,14 @@ do
         end
 
         self:SetProperty("Direction", direction)
+        self.StateProperties._default.Direction = direction
         self:InvalidateLayout(nil, true)
         return self
     end
 
     function PNL.Prototype:SetWrap(wrap)
         self:SetProperty("Wrap", wrap)
+        self.StateProperties._default.Wrap = wrap
         self:InvalidateLayout(nil, true)
         return self
     end
@@ -286,7 +496,8 @@ do
             self:SetComputed("Material", mat)
             return self
         end
-        
+    
+        self.StateProperties._default.Material = mat
         self:SetProperty("Material", mat)
         return self
     end
@@ -299,6 +510,7 @@ do
             return self
         end
         self:SetProperty("StrokeMaterial", mat)
+        self.StateProperties._default.StrokeMaterial = mat
         self:InvalidateLayout(nil, true)
         return self
     end
@@ -340,42 +552,54 @@ do
         return self[field] or self:GetParent() and self:GetParent():GetField(field)
     end
 
-    function PNL.Prototype:SetHover(property, value, duration, easeFunc)
-        if value == nil then
-            self.HoverProperties[property] = nil
-            return
-        end
-
-        self.HoverProperties[property] = {
-            Value = value,
-            Duration = duration,
-            EaseFunc = easeFunc
-        }
-        return self
-    end
-
-    function PNL.Prototype:GetHover(property)
-        return self.HoverProperties[property]
-    end
-
     function PNL.Prototype:Animate(property, to, duration, repetitions, easeFunc)
         local p = Promise.Create()
 
         local old = self.Animations[property]
+        local currentValue
+        
+        -- If interrupting an existing animation, get the current animated value
         if old then
+            local progress = (CurTime() - old.Start) / old.Duration
+            progress = math.Clamp(progress, 0, 1)
+            
+            local from = old.From
+            local to_old = old.To
+            
+            -- Calculate current interpolated value
+            if istable(from) then
+                currentValue = table.Copy(from)
+                for k, v in pairs(from) do
+                    if isnumber(v) and isnumber(to_old[k]) then
+                        currentValue[k] = v + (to_old[k] - v) * old.EaseFunc(progress)
+                    end
+                end
+            else
+                currentValue = from + (to_old - from) * old.EaseFunc(progress)
+            end
+            
             old:Complete(false)
+        else
+            -- No existing animation, start from current property value
+            currentValue = self:GetProperty(property)
         end
 
         assert(property, "No property specified")
         assert(to, "No target value specified")
         assert(duration, "No duration specified")
 
+        -- Handle case where easing function is passed as 4th parameter
+        if isfunction(repetitions) then
+            easeFunc = repetitions
+            repetitions = nil
+        end
+
         repetitions = repetitions or 1
         easeFunc = easeFunc or math.ease.InOutCubic
-        p.From = self:GetProperty(property)
+        p.From = currentValue
 
         -- Do some parsing
-        assert(Type.GetType(p.From) == Type.GetType(to) or not p.From or not to, "Property types do not match")
+        assert(Type.GetType(p.From) == Type.GetType(to) or not p.From or not to, "Property types do not match: " .. tostring(Type.GetType(p.From)) .. " vs " .. tostring(Type.GetType(to)) .. ": " .. tostring(to))
             
         p.To = to
         p.Duration = duration
@@ -398,20 +622,40 @@ do
     
 
     function PNL.Prototype:MoveTo(x, y, duration, repetitions, easeFunc)
+        -- Handle case where easing function is passed as 4th parameter
+        if isfunction(repetitions) then
+            easeFunc = repetitions
+            repetitions = nil
+        end
         self:Animate("X", x, duration, repetitions, easeFunc)
         return self:Animate("Y", y, duration, repetitions, easeFunc) -- They'll both elapse at the same time so it doesn't really matter what promise we return.
     end
 
     function PNL.Prototype:SizeTo(width, height, duration, repetitions, easeFunc)
+        -- Handle case where easing function is passed as 4th parameter
+        if isfunction(repetitions) then
+            easeFunc = repetitions
+            repetitions = nil
+        end
         self:Animate("Width", width, duration, repetitions, easeFunc)
         return self:Animate("Height", height, duration, repetitions, easeFunc) -- They'll both elapse at the same time so it doesn't really matter what promise we return.
     end
 
     function PNL.Prototype:AlphaTo(alpha, duration, repetitions, easeFunc)
+        -- Handle case where easing function is passed as 4th parameter
+        if isfunction(repetitions) then
+            easeFunc = repetitions
+            repetitions = nil
+        end
         return self:Animate("Alpha", alpha, duration, repetitions, easeFunc)
     end
 
     function PNL.Prototype:FillTo(color, duration, repetitions, easeFunc)
+        -- Handle case where easing function is passed as 4th parameter
+        if isfunction(repetitions) then
+            easeFunc = repetitions
+            repetitions = nil
+        end
         return self:Animate("Fill", color, duration, repetitions, easeFunc)
     end
 
@@ -699,6 +943,7 @@ do
             el:OnChildAdded(self)
             table.insert(el.Children, self)
         end
+        self:Paint() -- Force a paint to update render bounds
         return self
     end
 
@@ -769,6 +1014,8 @@ do
 
         local oldWidth, oldHeight = self.LastWidth, self.LastHeight
         local w, h = self:Compute("Width"), self:Compute("Height")
+        self:Compute("X")
+        self:Compute("Y")
 
         if not force and IsValid(self.Mesh) and oldWidth == w and oldHeight == h then
             self:DebugMessage("Skip", force, self.Mesh, oldWidth, oldHeight, w, h)
@@ -1128,50 +1375,6 @@ do
         self.AbsolutePos.x = self.AbsolutePos.x + self:GetMarginLeft()
         self.AbsolutePos.y = self.AbsolutePos.y + self:GetMarginTop()
 
-        -- Handle animations first.
-        for k, v in pairs(self.Animations) do
-            local p = (CurTime() - v.Start) / v.Duration
-            if p >= 1 then
-                self:SetProperty(k, v.To)
-                
-                if isany(k, "Width", "Height") then
-                    self:InvalidateLayout()
-                end
-
-                if v.Repetitions > 1 then
-                    v.Repetitions = v.Repetitions - 1
-                    v.Start = CurTime()
-                    v.From, v.To = v.To, v.From
-                else
-                    self.Animations[k] = nil
-                    v:Complete(true)
-                end
-            else
-                local from = v.From
-                local to = v.To
-                local val
-                
-                if istable(from) then
-                    val = table.Copy(from)
-
-                    for k2, v2 in pairs(from) do
-                        if not isnumber(v2) then
-                            continue
-                        end
-                        val[k2] = v2 + (to[k2] - v2) * v.EaseFunc(p)
-                    end
-                else
-                    val = v.From + (v.To - v.From) * v.EaseFunc(p)
-                end
-
-                self:SetProperty(k, val)
-            end
-
-            if isany(k, "Width", "Height") then
-                self:InvalidateLayout()
-            end
-        end
-
         local parent = self:GetParent()
         local pw, ph = parent and parent:GetWidth(), parent and parent:GetHeight()
         local w, h = self:GetWidth(), self:GetHeight()
@@ -1192,7 +1395,7 @@ do
         self.RenderBounds.w = math.min(self.AbsolutePos.x + w, (parent and parent.RenderBounds.w - parent.PaddingRight) or ScrW())
         self.RenderBounds.h = math.min(self.AbsolutePos.y + h, (parent and parent.RenderBounds.h - parent.PaddingBottom) or ScrH())
 
-        if IsValid(self.Mesh) then
+        if self:Compute("Visible") and IsValid(self.Mesh) then
 
             if self:GetCull() then
                 self:SetScissorRect()
@@ -1391,25 +1594,44 @@ do
         return self.RenderBounds.x, self.RenderBounds.y, self.RenderBounds.w, self.RenderBounds.h
     end
 
-    function PNL.Prototype:Find(name, noRecurse)
+    function PNL.Prototype:Find(key, name, single, noRecurse, out)
+        if isstring(key) and not isstring(name) then
+            name = key
+            key = "Name"
+        end
+        assert(isstring(key), "Find: Key must be a string")
+        assert(name, "Find: Name must be specified")
+
+        out = out or {}
         for k, v in pairs(self.Children) do
-            if v:GetName() == name then
-                return v
+            if v[key] == name then
+                table.insert(out, v)
+                if single then
+                    return out[1]
+                end
             end
 
             if not noRecurse then
-                local found = v:Find(name)
-                if found then
-                    return found
+                local found = v:Find(key, name, single, noRecurse, out)
+                if single and #found > 0 then
+                    return found[1]
                 end
             end
         end
+        return out
     end
 
     function PNL.Prototype:FindParent(name)
+        if isstring(key) and not isstring(name) then
+            name = key
+            key = "Name"
+        end
+        assert(isstring(key), "Find: Key must be a string")
+        assert(name, "Find: Name must be specified")
+
         local p = self:GetParent()
         while p do
-            if p:GetName() == name then
+            if p[key] == name then
                 return p
             end
             p = p:GetParent()
@@ -1471,13 +1693,24 @@ do
         return self:ScreenToLocal(self:GetHost():GetCursorPos())
     end
 
-    function PNL.Prototype:TestHover(x, y)
+    function PNL.Prototype:TestHover(x, y, noChildren)
+        if not self:Compute("Visible") then
+            return false
+        end
+
         local absX, absY = self:GetAbsolutePos()
         local w, h = self:GetWidth(), self:GetHeight()
         
         local hovered = (x >= absX and x <= absX + w and y >= absY and y <= absY + h)
+        if noChildren then
+            return hovered
+        end
+
         if hovered then
-            for k, v in pairs(self:GetChildren()) do
+            local children = self:GetChildren()
+            for k=#children, 1, -1 do
+                local v = children[k]
+
                 local el = v:TestHover(x, y)
                 if el then
                     return el
@@ -1549,31 +1782,10 @@ do
         if self:GetHovered() then
             return
         end
-
         self:SetHovered(true)
-        
-        for k, v in pairs(self.HoverProperties) do
-            v.Initial = v.Initial or self:GetProperty(k)
-            
-            local progress = 1
 
-            if v.Duration then
-                if v.Animation then
-                    local elapsed = CurTime() - v.Animation.Start
-                    progress = math.Clamp(elapsed / v.Duration, 0, 1)
-
-                    v.Animation:Complete(false)
-                    v.Animation = nil 
-                    self:CancelAnimation(k)
-                end
-                
-                local duration = v.Duration * progress
-                v.Animation = self:Animate(k, v.Value, duration, 1, v.EaseFunc):Then(function (succ)
-                    v.Animation = nil
-                end)
-            else
-                self:SetProperty(k, v.Value)
-            end
+        if self:GetHoverable() then
+            self:AddState("Hovered")
         end
 
         -- Propagate to children
@@ -1615,6 +1827,10 @@ do
         end
         self:SetHovered(false)
 
+        if self:GetHoverable() then
+            self:RemoveState("Hovered")
+        end
+
         for k, v in pairs(self.HoverProperties) do
             local progress = 1
 
@@ -1646,6 +1862,12 @@ do
     end
 
     function PNL.Prototype:OnCursorMoved(x, y)
+    end
+    
+    function PNL.Prototype:OnGainFocus(old)
+    end
+
+    function PNL.Prototype:OnLoseFocus(new)
     end
 
     function PNL.Prototype:OnMousePressed(button, src)
@@ -1681,6 +1903,56 @@ do
         end
     end
 
+    function PNL.Prototype:Think()
+        -- Handle animations first.
+        for k, v in pairs(self.Animations) do
+            local p = (CurTime() - v.Start) / v.Duration
+            if p >= 1 then
+                self:SetProperty(k, v.To)
+                
+                if isany(k, "Width", "Height") then
+                    self:InvalidateLayout()
+                end
+
+                if v.Repetitions > 1 then
+                    v.Repetitions = v.Repetitions - 1
+                    v.Start = CurTime()
+                    v.From, v.To = v.To, v.From
+                else
+                    self.Animations[k] = nil
+                    v:Complete(true)
+                end
+            else
+                local from = v.From
+                local to = v.To
+                local val
+                
+                if istable(from) then
+                    val = table.Copy(from)
+
+                    for k2, v2 in pairs(from) do
+                        if not isnumber(v2) then
+                            continue
+                        end
+                        val[k2] = v2 + (to[k2] - v2) * v.EaseFunc(p)
+                    end
+                else
+                    val = v.From + (v.To - v.From) * v.EaseFunc(p)
+                end
+
+                self:SetProperty(k, val)
+            end
+
+            if isany(k, "Width", "Height") then
+                self:InvalidateLayout()
+            end
+        end
+
+        for k, v in pairs(self.Children) do
+            v:Think()
+        end
+    end
+
     function PNL.Prototype:OnDisposed()
         for k, v in pairs(self.Children) do
             v:Dispose()
@@ -1706,12 +1978,26 @@ do
     function PanelHost.Prototype:Initialize()
         base(self, "Initialize")
 
-        self.Popovers = {}
+        self.Overlays = {}
 
         self:SetFontName("Tahoma")
         self:SetFontSize(14)
         self:SetFontWeight(500)
         self:SetTextColor(color_white)
+        self:SetFocusable(true)
+        self.FocusedPanel = self
+
+        hook.Add("Think", self, function ()
+            self:Think()
+        end)
+    end
+
+    function PanelHost.Prototype:CloseOverlays()
+        for k, v in pairs(self.Overlays) do
+            if IsValid(v) then
+                v:Close()
+            end
+        end
     end
 
     function PanelHost.Prototype:GetHost()
@@ -1743,6 +2029,7 @@ do
         self.CursorY = y
 
         local old = self:GetHoveredPanel()
+        local hover
 
         for i=#self.Children, 1, -1 do
             local v = self.Children[i]
@@ -1780,6 +2067,11 @@ do
     end
 
     function PanelHost.Prototype:OnCursorExited()
+        local hp = vgui.GetHoveredPanel()
+        if hp and hp.Interface then
+            return
+        end
+        
         self.CursorX = nil
         self.CursorY = nil
 
@@ -1791,14 +2083,50 @@ do
         end
     end
 
+    function PanelHost.Prototype:GetFocusedPanel()
+        return self.FocusedPanel
+    end
+
     function PanelHost.Prototype:OnMousePressed(button, src)
         if src then
             return
         end
 
         local pnl = self:GetHoveredPanel()
+
+        if hook.Run("Interface.MousePressed", self, button, pnl, src) then
+            return
+        end
+        
         if pnl then
             pnl:OnMousePressed(button)
+            
+            local p = pnl
+            
+            while p do
+                if p:GetFocusable() then
+                    if p == self:GetFocusedPanel() then
+                        break
+                    end
+
+                    local old = self.FocusedPanel
+                    if old then
+                        old:SetFocused(false)
+                        old:OnLoseFocus(p)
+                        old:RemoveState("Focused")
+                    end
+
+                    self.FocusedPanel = p
+                    
+                    p:SetFocused(true)
+                    p:AddState("Focused")
+                    p:OnGainFocus(old)
+                    
+                    break
+                end
+                p = p:GetParent()
+            end
+
         end
     end
 
@@ -1808,6 +2136,11 @@ do
         end
 
         local pnl = self:GetHoveredPanel()
+
+        if hook.Run("Interface.MouseReleased", self, button, pnl, src) then
+            return
+        end
+        
         if pnl then
             pnl:OnMouseReleased(button)
         end
@@ -1819,572 +2152,22 @@ do
         end
 
         local pnl = self:GetHoveredPanel()
+
+        if hook.Run("Interface.MouseWheeled", self, delta, pnl, src) then
+            return
+        end
+        
         if pnl then
             pnl:OnMouseWheeled(delta)
         end
     end
 
-    function PanelHost.Prototype:Paint()
-        base(self, "Paint")
-
-        --local x, y = self:GetCursorPos()
-        --if x and y then
-            --surface.DrawCircle(x, y, 5, Color(255, 0, 0, 255))
-        --end
-    end
-end
-
--- Materials, shaders and helpers
-do
-    local dp = 3
-
-    function RoundedBox(w, h, tl, tr, br, bl, sz)
-        if not tr then
-            tr = tl
-            br = tl
-            bl = tl
-        end
-
-        local x, y = 0, 0
-        local t = {}
-        local idx = 1
-
-        local function append(pt)
-            t[idx] = pt.x
-            t[idx + 1] = pt.y
-            idx = idx + 2
-        end
-
-        sz = sz or 8
-
-        -- top-left corner
-        if tl > 0 then
-            table.insert(t, { x = x, y = y + tl })
-            for i = 1, sz do
-                local ang = 90 / sz * i
-                local x2 = math.cos(math.rad(ang)) * tl
-                local y2 = math.sin(math.rad(ang)) * tl
-                append({ x = x + tl - x2, y = y + tl - y2 })
-            end
-        else
-            append({ x = x, y = y })  -- sharp corner
-        end
-
-        -- top-right corner
-        if tr > 0 then
-            append({ x = x + w - tr, y = y })
-            for i = 1, sz do
-                local ang = 90 + 90 / sz * i
-                local x2 = math.cos(math.rad(ang)) * tr
-                local y2 = math.sin(math.rad(ang)) * tr
-                append({ x = x + w - tr - x2, y = y + tr - y2 })
-            end
-        else
-            append({ x = x + w, y = y }) -- sharp corner
-        end
-
-        -- bottom-right corner
-        if br > 0 then
-            append({ x = x + w, y = y + h - br })
-            for i = 1, sz do
-                local ang = 0 + 90 / sz * i
-                local x2 = math.cos(math.rad(ang)) * br
-                local y2 = math.sin(math.rad(ang)) * br
-                append({ x = x + w - br + x2, y = y + h - br + y2 })
-            end
-        else
-            append({ x = x + w, y = y + h }) -- sharp corner
-        end
-
-        -- bottom-left corner
-        if bl > 0 then
-            append({ x = x + bl, y = y + h })
-            for i = 1, sz do
-                local ang = 90 + 90 / sz * i
-                local x2 = math.cos(math.rad(ang)) * bl
-                local y2 = math.sin(math.rad(ang)) * bl
-                append({ x = x + bl + x2, y = y + h - bl + y2 })
-            end
-        else
-            append({ x = x, y = y + h }) -- sharp corner
-        end
-
-        return t
-    end
-
-    local Radial = Material("sstrp25/shaders/radialgradient")
-    function RadialGradient(color1, offset1, color2, offset2, color3)
-        if not offset1 then
-            offset1 = 0.25
-            color2 = color1
-        end
-
-        if not offset2 then
-            offset2 = 0.75
-            color3 = color2
-        end
-
-        return function (w, h) 
-
-            local alpha = surface.GetAlphaMultiplier()
-
-            Radial:SetFloat("$c0_x", math.Round(color1.r / 255, dp))
-            Radial:SetFloat("$c0_y", math.Round(color1.g / 255, dp))
-            Radial:SetFloat("$c0_z", math.Round(color1.b / 255, dp))
-            Radial:SetFloat("$c0_w", math.Round((color1.a / 255) * alpha, dp))
-            
-            Radial:SetFloat("$c1_x", math.Round(color2.r / 255, dp))
-            Radial:SetFloat("$c1_y", math.Round(color2.g / 255, dp))
-            Radial:SetFloat("$c1_z", math.Round(color2.b / 255, dp))
-            Radial:SetFloat("$c1_w", math.Round((color2.a / 255) * alpha, dp))
-
-            Radial:SetFloat("$c2_x", math.Round(color3.r / 255, dp))
-            Radial:SetFloat("$c2_y", math.Round(color3.g / 255, dp))
-            Radial:SetFloat("$c2_z", math.Round(color3.b / 255, dp))
-            Radial:SetFloat("$c2_w", math.Round((color3.a / 255) * alpha, dp))
-            
-            Radial:SetFloat("$c3_x", math.Round(offset1, dp))
-            Radial:SetFloat("$c3_y", math.Round(offset2, dp))
-
-            return Radial
-        end
-    end
-
-    local mat = Material("sstrp25/shaders/lineargradientv2")
-    function LinearGradient(col1, off1, col3, rotDeg)
-        
-        local colA = col1
-        local colB = col3 or colA
-        
-
-        local alpha = surface.GetAlphaMultiplier()
-        colA.a = colA.a * alpha
-        colB.a = colB.a * alpha
-
-        local rad = math.rad((rotDeg or 0) + LG_OFFSET)
-
-        return function (w, h)
-            -- aspect-correct the direction in UV space
-            local ax = w / math.max(h, 1)
-            local dx, dy = math.Round(math.cos(rad), 2), math.Round(math.sin(rad), 2)
-            local len = math.sqrt(dx*dx + dy*dy)
-            if len > 0 then dx, dy = dx/len, dy/len end
-
-            -- colours
-            local alpha = surface.GetAlphaMultiplier()
-            mat:SetFloat("$c0_x", colA.r/255) 
-            mat:SetFloat("$c0_y", colA.g/255)
-            mat:SetFloat("$c0_z", colA.b/255) 
-            mat:SetFloat("$c0_w", (colA.a/255) * alpha)
-            mat:SetFloat("$c1_x", colB.r/255) 
-            mat:SetFloat("$c1_y", colB.g/255)
-            mat:SetFloat("$c1_z", colB.b/255) 
-            mat:SetFloat("$c1_w", (colB.a/255) * alpha)
-
-            -- pack direction (xy); the shader ignores z/w now
-            mat:SetFloat("$c3_x", dx)
-            mat:SetFloat("$c3_y", dy)
-            mat:SetFloat("$c3_z", off1)
-            mat:SetFloat("$c3_w", off1)
-
-            return mat
-        end
-    end
-end
-
--- Text
-do
-    local Text = Interface.Register("Text", PNL)
-    Text:CreateProperty("Value", Type.String, { Default = "" })
-    Text:CreateProperty("Wrap", Type.Boolean, { Default = false })
-
-    function Text.Prototype:Initialize()
-        base(self, "Initialize")
-    end
-
-    function Text.Prototype:PerformLayout(noPropagate)
-        self.Lines = string.Split(self:Compute("Value"), "\n")
-
-        if self:GetWrap() then
-            local mw = self:Compute("Width")
-            
-            local out = {}
-            surface.SetFont(self:GetFont())
-            for _, l in pairs(self.Lines) do
-                local current = {}
-                local w = 0
-                for _, word in pairs(string.Split(l, " ")) do
-                    local tw, th = surface.GetTextSize(word .. " ")
-                    if w + tw > mw then
-                        table.insert(out, table.concat(current, " "))
-                        current = { word }
-                        w = tw
-                    else
-                        table.insert(current, word)
-                        w = w + tw
-                    end
-                end
-
-                if #current > 0 then
-                    table.insert(out, table.concat(current, " "))
-                end
-
-                self.Lines = out
+    function PanelHost.Prototype:TestHover(x, y)
+        for k, v in pairs(self:GetChildren()) do
+            if v:TestHover(x, y, true) then
+                return true
             end
         end
-
-        return base(self, "PerformLayout", noPropagate)
-    end
-
-    function Text.Prototype:SetWidth(value)
-        self:SetComputed("Width", nil)
-        self.WidthMode = 0
-
-        if value == nil then
-            self:SetComputed("Width", function (self)
-                if not self.Lines then
-                    self:InvalidateLayout(true)
-                end
-
-                local w = 0
-                for k, v in pairs(self.Lines) do
-                    surface.SetFont(self:GetFont())
-                    local tw, th = surface.GetTextSize(v)
-                    w = math.max(w, tw)
-                end
-
-                self.WidthMode = 1
-                return w 
-            end)
-            return self
-        else
-            return base(self, "SetWidth", value)
-        end
-    end
-
-    function Text.Prototype:SetHeight(value)
-        self:SetComputed("Height", nil)
-        self.HeightMode = 0
-
-        if value == nil then
-            self:SetComputed("Height", function (self)
-                if not self.Lines then
-                    self:InvalidateLayout(true)
-                end
-                
-                local h = 0
-                for k, v in pairs(self.Lines) do
-                    surface.SetFont(self:GetFont())
-                    local tw, th = surface.GetTextSize(v)
-                    h = h + th
-                end
-
-                self.HeightMode = 1
-                return h 
-            end)
-            return self
-        else
-            return base(self, "SetHeight", value)
-        end
-    end
-
-    function Text.Prototype:Paint()
-        base(self, "Paint")
-
-        local txt = self:Compute("Value")
-        if txt ~= self.Last then
-            self:InvalidateLayout(true)
-        end
-
-        self:SetScissorRect()
-        if self.Lines then
-            local y = 0
-            surface.SetFont(self:GetFont())
-            for k, v in pairs(self.Lines) do
-                local _, th = surface.GetTextSize(v)
-                surface.SetTextPos(0, y)
-                surface.SetTextColor(self:GetTextColor())
-                surface.DrawText(v)
-                y = y + th
-            end
-        end
-        render.SetScissorRect(0, 0, 0, 0, false)
-
-        self.Last = txt
-    end
-end
-
--- Overlay
-local Overlay = Interface.Register("Overlay", PNL)
-do
-    Overlay:CreateProperty("ShowOnHover", Type.Boolean, { Default = true })
-    function Overlay.Prototype:Initialize()
-        base(self, "Initialize")
-
-        self:SetAbsolute(true)
-        self:SetVisible(false)
-    end
-    
-    function Overlay.Prototype:Paint(asOverlay)
-        local m = Matrix()
-        local parent = self:GetParent()
-        m:Translate(parent.AbsolutePos)
-        m:Translate(Vector(self:Compute("X"), self:Compute("Y"), 0))
-
-        cam.PushModelMatrix(m)
-
-            self.AbsolutePos = cam.GetModelMatrix():GetTranslation()
-            self.AbsolutePos.x = self.AbsolutePos.x + self:GetMarginLeft()
-            self.AbsolutePos.y = self.AbsolutePos.y + self:GetMarginTop()
-
-            -- Handle animations first.
-            for k, v in pairs(self.Animations) do
-                local p = (CurTime() - v.Start) / v.Duration
-                if p >= 1 then
-                    self:SetProperty(k, v.To)
-                    
-                    if isany(k, "Width", "Height") then
-                        self:InvalidateLayout()
-                    end
-
-                    if v.Repetitions > 1 then
-                        v.Repetitions = v.Repetitions - 1
-                        v.Start = CurTime()
-                        v.From, v.To = v.To, v.From
-                    else
-                        self.Animations[k] = nil
-                        v:Complete(true)
-                    end
-                else
-                    local from = v.From
-                    local to = v.To
-                    local val
-                    
-                    if istable(from) then
-                        val = table.Copy(from)
-
-                        for k2, v2 in pairs(from) do
-                            if not isnumber(v2) then
-                                continue
-                            end
-                            val[k2] = v2 + (to[k2] - v2) * v.EaseFunc(p)
-                        end
-                    else
-                        val = v.From + (v.To - v.From) * v.EaseFunc(p)
-                    end
-
-                    self:SetProperty(k, val)
-                end
-
-                if isany(k, "Width", "Height") then
-                    self:InvalidateLayout()
-                end
-            end
-
-            local parent = self:GetParent()
-            local pw, ph = parent and parent:GetWidth(), parent and parent:GetHeight()
-            local w, h = self:GetWidth(), self:GetHeight()
-            local x, y = self:GetX(), self:GetY()
-
-            if not w or not h then
-                return
-            end
-            self:Compute("Visible")
-
-            local alpha = surface.GetAlphaMultiplier()
-            local newAlpha = alpha * (self:Compute("Alpha") / 255)
-
-            surface.SetAlphaMultiplier(newAlpha)
-
-            self.RenderBounds.x = self.AbsolutePos.x --, (parent and parent.RenderBounds.x + parent:GetPaddingLeft()) or 0)
-            self.RenderBounds.y = self.AbsolutePos.y -- math.max(self.AbsolutePos.y, (parent and parent.RenderBounds.y + parent:GetPaddingTop()) or 0)
-            self.RenderBounds.w = self.AbsolutePos.x + w --, (parent and parent.RenderBounds.w - parent.PaddingRight) or ScrW())
-            self.RenderBounds.h = self.AbsolutePos.y + h --, (parent and parent.RenderBounds.h - parent.PaddingBottom) or ScrH())
-
-            if asOverlay and IsValid(self.Mesh) then
-
-                if self:GetCull() then
-                    self:SetScissorRect()
-                end
-
-                    local m = Matrix()
-                    m:Translate(Vector(self:GetMarginLeft(),  self:GetMarginTop(), 0))
-
-                    cam.PushModelMatrix(m, true)
-                        self:PaintMesh()
-                        self:PaintStroke()
-
-                        self:PaintChildren()
-                    cam.PopModelMatrix()
-
-                    render.SetScissorRect(0, 0, 0, 0, false)
-                
-                    
-                    if VisualizeLayout:GetBool() then
-                        
-                        surface.SetAlphaMultiplier(self:GetVisible() and 1 or 0.05)
-
-                        surface.SetDrawColor(Color(128, 255, 255, 225))
-                        surface.DrawOutlinedRect(
-                            0, 0,
-                            self:GetOuterWidth(),
-                            self:GetOuterHeight(),
-                            2
-                        )
-                        
-                        -- Margin bounds
-                        cam.PushModelMatrix(m, true)
-                            surface.SetDrawColor(Color(255, 255, 0, 225))
-                            surface.DrawOutlinedRect(
-                                0, 0,
-                                self:GetWidth(),
-                                self:GetHeight(),
-                                2
-                            )
-
-                            -- Inner bounds
-                            m = Matrix()
-                            m:Translate(Vector(
-                                self:GetPaddingLeft(),
-                                self:GetPaddingTop(),
-                                0
-                            ))
-                            cam.PushModelMatrix(m, true)
-                                surface.SetDrawColor(Color(255, 0, 255, 225))
-                                surface.DrawOutlinedRect(
-                                    0, 0,
-                                    self:GetInnerWidth(),
-                                    self:GetInnerHeight(),
-                                    2
-                                )
-                                
-
-                                if self.ContentWidth and self.ContentHeight then
-                                    surface.SetDrawColor(Color(0, 255, 0, 100))
-                                    local align = self:GetAlign()
-                                    
-                                    local x, y = 0, 0
-                                    if isany(align, 8, 5, 2) then
-                                        x = self:GetInnerWidth()/2 - self.ContentWidth/2
-                                    elseif isany(align, 9, 6, 3) then
-                                        x = self:GetInnerWidth() - self.ContentWidth
-                                    end
-
-                                    if isany(align, 4, 5, 6) then
-                                        y = self:GetInnerHeight()/2 - self.ContentHeight/2
-                                    elseif isany(align, 1, 2, 3) then
-                                        y = self:GetInnerHeight() - self.ContentHeight
-                                    end
-
-                                    surface.DrawOutlinedRect(
-                                        x,
-                                        y,
-                                        self.ContentWidth,
-                                        self.ContentHeight,
-                                        2
-                                    )
-                                end
-                            cam.PopModelMatrix()
-                        cam.PopModelMatrix()
-
-                        
-                        surface.SetAlphaMultiplier(1)
-                        if CurTime() - self.LastLayout < 0.5 then
-                            local elapsed = CurTime() - self.LastLayout
-                            local alpha = math.Clamp(1 - (elapsed * 2), 0, 1) * 255
-
-                            surface.SetDrawColor(Color(255, 255, 0, alpha))
-                            surface.DrawOutlinedRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight(), 2)
-                            surface.SetDrawColor(Color(255, 0, 0, alpha))
-                            surface.DrawRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight())
-                        end
-                    end
-                surface.SetAlphaMultiplier(alpha)
-            end
-        cam.PopModelMatrix()
-    end
-
-    function Overlay.Prototype:Open()
-        if not self:IsOpen() then
-            self:SetVisible(true)
-            self:InvalidateLayout()
-            table.insert(self:GetHost():GetChildren(), self)
-        end
-    end
-
-    function Overlay.Prototype:CreatePanel()
-        if IsValid(self.Panel) then
-            return
-        end
-        
-        self.Panel = Interface.Create("Panel", self:GetHost())
-        local me = self
-        local x, y = self:LocalToScreen(0, 0)
-        
-        self.Panel:SetComputed("X", function () local x, y = me:LocalToScreen(0, 0) return x end)
-        self.Panel:SetComputed("Y", function () local x, y = me:LocalToScreen(0, 0) return y end)
-        self.Panel:SetComputed("Width", function () return me:GetWidth() end)
-        self.Panel:SetComputed("Height", function () return me:GetHeight() end)
-        self.Panel:SetComputed("Fill", function () return me:Compute("Fill") end)
-
-        self.Panel.Children = self.Children 
-        return self.Panel
-    end
-
-    function Overlay.Prototype:IsOpen()
-        return self:GetVisible()
-    end
-
-    function Overlay.Prototype:Toggle()
-        if self:IsOpen() then
-            self:Close()
-        else
-            self:Open()
-        end
-    end
-
-    function Overlay.Prototype:GetPanel()
-        return self.Panel
-    end
-
-    function Overlay.Prototype:RemovePanel()
-        if IsValid(self.Panel) then
-            self.Panel:Dispose()
-            self.Panel = nil
-        end
-    end
-
-    function Overlay.Prototype:Close()
-        self:SetVisible(false)
-        table.RemoveByValue(self:GetHost():GetChildren(), self)
-    end
-
-    function Overlay.Prototype:StartHover(src, last)
-        if self:Compute("ShowOnHover") then
-            self:Open()
-        end
-    end
-
-    function Overlay.Prototype:EndHover(src, new)
-        if not self:Compute("ShowOnHover") then
-            return
-        end
-
-        local p = new
-        while p do
-            -- If it's the same panel or one of our children, we don't close the overlay since we're effectively still hovered.
-            if p == self:GetParent() then
-                return
-            end
-            p = p:GetParent()
-        end
-
-        self:Close()
-    end
-
-    function Overlay.Prototype:OnDisposed()
-        base(self, "OnDisposed")
-        table.RemoveByValue(self:GetHost():GetChildren(), self)
     end
 end
 
@@ -2407,6 +2190,8 @@ do
     end
 
     Interface.VGUI = vgui.Create("EditablePanel")
+    Interface.VGUI:SetMouseInputEnabled(true)
+    Interface.VGUI:SetKeyboardInputEnabled(true)
     function Interface.VGUI:PerformLayout(w, h)
         self:SetSize(ScrW(), ScrH())
     end
@@ -2437,6 +2222,18 @@ do
 
     function Interface.VGUI:OnMouseWheeled(delta)
         return Interface.BasePanel:OnMouseWheeled(delta)
+    end
+
+    function Interface.VGUI:OnKeyCodePressed(key)
+        local focused = Interface.BasePanel:GetFocusedPanel()
+        if focused and focused.OnKeyCodePressed then
+            focused:OnKeyCodePressed(key)
+        end
+        return true
+    end
+
+    function Interface.VGUI:TestHover(x, y)
+        return Interface.BasePanel:TestHover(x, y)
     end
 end
 
@@ -2495,7 +2292,6 @@ do
         end
     end
 
-
     function Interface.ParseXML(xml)
         local p = setmetatable({}, parser)
         p.root = {
@@ -2540,33 +2336,9 @@ do
         return p.top
     end
 
-    local function SetProp(pnl, key, value)
-        local setter = pnl["Set" .. key]
-        if setter then
-            setter(pnl, value)
-        else
-            pnl[key] = value
-        end
-    end
-
     hook.Add("Interface.XMLParseNamespace", function (self, namespace, key, value)
         if namespace == "Computed" then
             self:SetComputed(key, SmartCompileString(value, self, key))
-            return false
-        elseif namespace == "Hover" then
-            local value, duration, easeFunc = unpack(string.Split(value, ","))
-            
-            assert(value, "Hover properties must have a value: " .. key)
-            duration = tonumber(duration)
-            if easeFunc then
-                easeFunc = math.ease[string.Trim(easeFunc)]
-            end
-
-            local prop = self:GetType():GetProperty(key)
-            value = prop.Type:Parse(value)
-
-            self:SetHover(key, value, duration, easeFunc)
-
             return false
         elseif isany(namespace, "Func", "Function") then
             local func = SmartCompileString(value, self, key)
@@ -2627,79 +2399,3 @@ do
         return out
     end
 end
-
-Interface.RegisterFromXML("TestInside", [[
-    <Panel Align="1" Direction="RIGHT" Gap="16">
-        <Panel Name="Left" Width="128" Height="128" Fill="255 0 255 255" />
-        <Panel Name="Mid" Width="Grow" Height="128" Padding="16" Hoverable="true" Fill="255 255 255 255" Alpha="32" Hover:Alpha="255, 0.25" Align="5"
-            Func:LeftClick="function (self, src)
-                ClickSound()
-                self:Find('Overlay'):Toggle()
-                return true
-            end"
-        >
-            <Panel Name="Grandchild" Width="64" Height="64" Fill="255 255 0 255" Hoverable="true">
-            </Panel>
-            <Overlay 
-                Name="Overlay"
-                :Y="self:GetParent():GetHeight()" 
-                :Width="self:GetParent():GetWidth()"
-                :Shape="RoundedBox(self:GetWidth(), self:GetHeight(), 0, 0, 16, 16)"
-                Fill="0 0 0 128" 
-                ShowOnHover="false"
-                PaddingBottom="16"
-                Hoverable="true"
-                Align="8"
-                Direction="Down"
-                Gap="8"
-            >
-                <Panel Width="100%" Fill="255 0 0 128" Hoverable="true" Hover:Fill="255 255 255 128, 0.2">
-                    <Text Value="Test" />
-                </Panel>
-                <Panel Width="100%" Fill="255 0 0 128" Hoverable="true" Hover:Fill="255 255 255 128, 0.2">
-                    <Text Value="Test" />
-                </Panel>
-                <Panel Width="100%" Fill="255 0 0 128" Hoverable="true" Hover:Fill="255 255 255 128, 0.2">
-                    <Text Value="Test" />
-                </Panel>
-            </Overlay>
-        </Panel>
-        <Panel Name="Right" Width="128" Height="128" Fill="0 255 255 255" />
-    </Panel>
-]])
-
-p = Interface.CreateFromXML(nil, [[
-    <Panel 
-        Name="Test" 
-        :X="self:GetParent():GetWidth() / 2 - self:GetOuterWidth() / 2"
-        :Y="self:GetParent():GetHeight() / 2 - self:GetOuterHeight() / 2"
-        :Shape="RoundedBox(self:GetWidth(), self:GetHeight(), 64, 64, 64, 64)"
-        :Material="RadialGradient(
-            Color(0, 14, 30, 255),
-            0.3,
-            Color(0, 14, 30, 255),
-            0.9,
-            Color(0, 3, 10, 255)
-        )"
-        Fill="255 255 255 255"
-        Align="5" 
-        Direction="RIGHT" 
-        Cursor="hand" 
-        Width="800" 
-        Height="600" 
-        Margin="16"
-        Padding="32" 
-        Hoverable="true" 
-        Alpha="225" 
-        Stroke="8"
-        :StrokeMaterial="LinearGradient(
-            Color(255, 60, 60, 192),
-            1,
-            Color(40, 42, 46, 0),
-            90
-        )"
-        Gap="16"
-    >
-        <TestInside Width="100%" Height="100%" />
-    </Panel>
-]])

@@ -241,7 +241,6 @@ end
 
 function stringex.SubstringBeforeLast(text, delimiter)
     local s = string.Split(text, delimiter)
-    print(text, delimiter)
     return table.concat(s, delimiter, 1, #s - 1)
 end
 

@@ -132,6 +132,7 @@ do
 	local ReservedNames = {
 		Type = true
 	}
+
 	-- @test Type.Register
 	function TYPE:CreateProperty(name, type, options)
 		options = options or {}
@@ -176,6 +177,9 @@ do
 
 		self.PropertiesByName[name] = prop
 		self.PropertiesByCode[prop.Code] = prop
+
+		hook.Run("Type.CreateProperty", self, name, type, options)
+		
 		return prop
 	end
 
