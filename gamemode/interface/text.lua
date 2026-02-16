@@ -14,6 +14,16 @@ do
         base(self, "Initialize")
     end
 
+    function Text.Prototype:SetValue(value)
+        -- Reset position when value changes so parent can recompute layout
+        if not self:GetAbsolute() and self:GetProperty("Value") ~= value then
+            self:SetX(0)
+            self:SetY(0)
+        end
+        self:SetProperty("Value", value)
+        return self
+    end
+
     function Text.Prototype:PerformLayout(noPropagate)
         self.Lines = string.Split(self:Compute("Value"), "\n")
 
@@ -105,7 +115,13 @@ do
 
         local txt = self:Compute("Value")
         if txt ~= self.Last then
-            self:InvalidateLayout(true)
+            -- Reset position when value changes so parent can recompute layout
+            if not self:GetAbsolute() then
+                self:SetX(0)
+                self:SetY(0)
+            end
+            self:InvalidateLayout(true, true)
+            self:GetParent():InvalidateLayout(true, true)
         end
 
         if self:Compute("Visible") then

@@ -703,7 +703,11 @@ end
 do
 	-- @test Type.New
 	function TYPE:GetDatabaseTable()
-		return self:GetOptions().Table
+		local opt = self:GetOptions().Table
+		if not opt then
+			return nil
+		end
+		return string.lower(opt)
 	end
 
 	function TYPE:GetDatabaseKey()
@@ -712,7 +716,7 @@ do
 
 	if SERVER then
 		function TYPE:CreateDatabaseTable()
-			local name = self:GetOptions().Table
+			local name = self:GetDatabaseTable()
 			if not name then
 				return
 			end

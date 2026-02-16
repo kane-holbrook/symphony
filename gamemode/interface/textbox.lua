@@ -29,6 +29,8 @@ function TEXTBOX.Prototype:Initialize()
     self.TextEntry.TestHover = self.TextEntryTestHover
     self.TextEntry.AllowInput = self.AllowInput
     self.TextEntry.OnValueChange = self.OnValueChange
+    self.TextEntry.OnGetFocus = self.TextEntryGetFocus
+    self.TextEntry.OnLoseFocus = self.TextEntryLoseFocus
     self.TextEntry:SetUpdateOnType(true)
 
     self:SetComputed("Height", function ()
@@ -48,6 +50,27 @@ function TEXTBOX.Prototype:SetNumeric(val)
     self:SetProperty("Numeric", val)
     self.TextEntry:SetNumeric(val)
     return self
+end
+
+function TEXTBOX.Prototype:TextEntryGetFocus()
+    
+    local intf = self.Interface
+    local host = intf:GetHost()
+    local p = intf
+    while p do
+        if p:Compute("Focusable") then
+            host:SetFocus(p) 
+            return
+        end
+        p = p:GetParent()
+    end
+end
+
+function TEXTBOX.Prototype:TextEntryLoseFocus()
+    local host = self.Interface:GetHost()
+    if host:GetFocusedPanel() == self.Interface then
+        host:SetFocus(nil)
+    end
 end
 
 function TEXTBOX.Prototype:PaintTextEntry(w, h)

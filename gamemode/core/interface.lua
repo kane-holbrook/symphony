@@ -227,13 +227,16 @@ do
         self.Computed = {}
         self.Children = {}
         self.Animations = {}
-        self.FuncEnv = setmetatable({}, { __index = _G })
+        self.FuncEnv = setmetatable({ Width = function () return self:GetWidth() end, Height = function () return self:GetHeight() end }, { __index = _G })
         self.RenderBounds = {}
         self.HoverProperties = {}
         self.Class = string.sub(self:GetType():GetName(), 11)
         self.States = {}
         self.StateProperties = {}
         self.StatePropertyPriorities = {}
+        
+        self.LayoutCount = 0
+        self.FullLayoutCount = 0
 
         self.Userdata = GC(function ()
             if not self:IsDisposed() then
@@ -524,19 +527,19 @@ do
     end
 
     function PNL.Prototype:GetFontName()
-        return self:GetProperty("FontName") or self:GetParent():GetFontName()
+        return self:GetProperty("FontName") or (self:GetParent() and self:GetParent():GetFontName()) or "Tahoma" 
     end
 
     function PNL.Prototype:GetFontSize()
-        return self:GetProperty("FontSize") or self:GetParent():GetFontSize()
+        return self:GetProperty("FontSize") or (self:GetParent() and self:GetParent():GetFontSize()) or 11
     end
 
     function PNL.Prototype:GetFontWeight()
-        return self:GetProperty("FontWeight") or self:GetParent():GetFontWeight()
+        return self:GetProperty("FontWeight") or (self:GetParent() and self:GetParent():GetFontWeight()) or 300
     end
 
     function PNL.Prototype:GetTextColor()
-        return self:GetProperty("TextColor") or self:GetParent():GetTextColor()
+        return self:GetProperty("TextColor") or (self:GetParent() and self:GetParent():GetTextColor()) or color_white
     end
 
     function PNL.Prototype:GetCursor()
@@ -942,8 +945,9 @@ do
         if el then
             el:OnChildAdded(self)
             table.insert(el.Children, self)
+            el:Paint() -- Force a paint to update render bounds @debt renderbounds should be calculated elsewhere
         end
-        self:Paint() -- Force a paint to update render bounds
+        self:Paint() -- Force a paint to update render bounds @debt renderbounds should be calculated elsewhere
         return self
     end
 
@@ -991,12 +995,15 @@ do
             local p = Promise.Create()
             debounce(0, self, function ()
                 self:InvalidateLayout(true, force, noPropagate, noChildren)
+                self:DebugMessage("Layout", self.LayoutCount, force, oldWidth, oldHeight, w, h)
                 p:Complete()
             end)
             return p
         end
         
         self:PerformLayout(force, noPropagate, noChildren)
+        self:DebugMessage("Layout", self.LayoutCount, force, oldWidth, oldHeight, w, h)
+
     end
 
     function PNL.Prototype:CancelLayout()
@@ -1005,6 +1012,7 @@ do
 
     function PNL.Prototype:PerformLayout(force, noPropagate, noChildren)
         self.LastLayout = CurTime()
+        self.LayoutCount = self.LayoutCount + 1
 
 
         if self:IsSizeDerived() and not noChildren then
@@ -1017,13 +1025,12 @@ do
         self:Compute("X")
         self:Compute("Y")
 
+
         if not force and IsValid(self.Mesh) and oldWidth == w and oldHeight == h then
-            self:DebugMessage("Skip", force, self.Mesh, oldWidth, oldHeight, w, h)
             -- Don't do anything if we're exactly the same size.
             return
         end
 
-        self:DebugMessage("Calc", force, self.Mesh, oldWidth, oldHeight, w, h)
         self:RegenerateMesh()
 
         -- If we're not a relative size, we need to propagate invalidation upwards.
@@ -1051,6 +1058,7 @@ do
 
         self.LastWidth = w
         self.LastHeight = h
+        self.FullLayoutCount = self.FullLayoutCount + 1
     end
 
     function PNL.Prototype:RegenerateMesh()
@@ -1389,6 +1397,10 @@ do
         local newAlpha = alpha * (self:Compute("Alpha") / 255)
 
         surface.SetAlphaMultiplier(newAlpha)
+
+        if parent and not parent.RenderBounds.x then
+            error("Parent renderbounds not set?", self, parent)
+        end
 
         self.RenderBounds.x = math.max(self.AbsolutePos.x, (parent and parent.RenderBounds.x + parent:GetPaddingLeft()) or 0)
         self.RenderBounds.y = math.max(self.AbsolutePos.y, (parent and parent.RenderBounds.y + parent:GetPaddingTop()) or 0)
@@ -2102,31 +2114,35 @@ do
             pnl:OnMousePressed(button)
             
             local p = pnl
-            
             while p do
-                if p:GetFocusable() then
-                    if p == self:GetFocusedPanel() then
-                        break
-                    end
-
-                    local old = self.FocusedPanel
-                    if old then
-                        old:SetFocused(false)
-                        old:OnLoseFocus(p)
-                        old:RemoveState("Focused")
-                    end
-
-                    self.FocusedPanel = p
-                    
-                    p:SetFocused(true)
-                    p:AddState("Focused")
-                    p:OnGainFocus(old)
-                    
-                    break
+                if p:Compute("Focusable") then
+                    self:SetFocus(p)                    
+                    return
                 end
                 p = p:GetParent()
             end
+        end
+    end
 
+    function PanelHost.Prototype:SetFocus(panel)
+
+        if panel == self:GetFocusedPanel() then
+            return
+        end
+
+        local old = self.FocusedPanel
+        if old then
+            old:SetFocused(false)
+            old:OnLoseFocus(p)
+            old:RemoveState("Focused")
+        end
+
+        self.FocusedPanel = panel
+        
+        if panel then
+            panel:SetFocused(true)
+            panel:AddState("Focused")
+            panel:OnGainFocus(old)
         end
     end
 
@@ -2397,5 +2413,16 @@ do
         local out = Interface.Register(name, parsed.Tag)
         out.XML = parsed
         return out
+    end
+
+    function Interface.Open()
+        Interface.VGUI:MakePopup()
+        Interface.VGUI:SetKeyboardInputEnabled(true)
+        Interface.VGUI:SetMouseInputEnabled(true)
+    end
+
+    function Interface.Close()
+        Interface.VGUI:SetKeyboardInputEnabled(false)
+        Interface.VGUI:SetMouseInputEnabled(false)
     end
 end
