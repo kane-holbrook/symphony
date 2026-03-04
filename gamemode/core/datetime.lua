@@ -27,13 +27,15 @@ end
 
 function TimeSpan.Metamethods:__tostring()
     local total = self:GetSeconds()
+    local years = math.floor(total / 31536000)
+    total = total - (years * 31536000)
     local days = math.floor(total / 86400)
     total = total - (days * 86400)
     local hours = math.floor(total / 3600)
     total = total - (hours * 3600)
     local minutes = math.floor(total / 60)
     local seconds = total - (minutes * 60)
-    return string.format("%dd %dh %dm %ds", days, hours, minutes, seconds)
+    return string.format("%dy %dd %dh %dm %ds", years, days, hours, minutes, seconds)
 end
 
 local DT = Type.Register("DateTime", nil, { DatabaseType = "BIGINT" })
@@ -113,6 +115,10 @@ end
 
 function DT.Prototype:AddDays(d)
     return self:AddSeconds(d * 86400)
+end
+
+function DT.Prototype:AddYears(y)
+    return self:AddSeconds(y * 31536000)
 end
 
 function DT:Encode(obj)

@@ -151,6 +151,13 @@ local function ApplyProperties(pnl, node)
             else
                 v = result
             end
+            
+            local setter = pnl["Set" .. k]
+            if setter then
+                setter(pnl, v)
+            else
+                pnl[k] = v
+            end
         else
             local setter = pnl["Set" .. k]
             if setter then
@@ -234,6 +241,7 @@ do
         self.States = {}
         self.StateProperties = {}
         self.StatePropertyPriorities = {}
+        self.FindCache = {}
         
         self.LayoutCount = 0
         self.FullLayoutCount = 0
@@ -254,7 +262,12 @@ do
         self:SetHeight()
 
         self:InitXML()
-        self:InvalidateLayout(nil, true)
+        self:InvalidateLayout()
+        self.Initialized = true
+    end
+
+    function PNL.Prototype:IsInitialized()
+        return self.Initialized
     end
 
     function PNL.Prototype:SetStateProperty(state, property, value, duration, ease, priority)
@@ -453,14 +466,14 @@ do
             self:SetComputed("Shape", nil)
             self:SetProperty("Shape", shape)
         end
-        self:InvalidateLayout(nil, true)
+        self:InvalidateLayout()
         return self
     end
 
     function PNL.Prototype:SetAlign(align)
         self:SetProperty("Align", align)
         self.StateProperties._default.Align = align
-        self:InvalidateLayout(nil, true, nil, true)
+        self:InvalidateLayout(nil, nil, true)
         return self
     end
 
@@ -481,14 +494,14 @@ do
 
         self:SetProperty("Direction", direction)
         self.StateProperties._default.Direction = direction
-        self:InvalidateLayout(nil, true)
+        self:InvalidateLayout()
         return self
     end
 
     function PNL.Prototype:SetWrap(wrap)
         self:SetProperty("Wrap", wrap)
         self.StateProperties._default.Wrap = wrap
-        self:InvalidateLayout(nil, true)
+        self:InvalidateLayout()
         return self
     end
 
@@ -514,7 +527,7 @@ do
         end
         self:SetProperty("StrokeMaterial", mat)
         self.StateProperties._default.StrokeMaterial = mat
-        self:InvalidateLayout(nil, true)
+        self:InvalidateLayout()
         return self
     end
 
@@ -678,6 +691,7 @@ do
     end
 
     function PNL.Prototype:Compute(property, skipCache)        
+
         if not self.CacheTime or self.CacheTime < engine.TickCount() then
             self.Cache = {} -- Reset the cache every tick
             self.CacheTime = engine.TickCount()
@@ -708,7 +722,7 @@ do
 
         if property == "Visible" then
             if self:GetParent() then
-                self:GetParent():InvalidateLayout(nil, nil, nil, true)
+                self:GetParent():InvalidateLayout(nil, nil, true)
             end
             return
         end
@@ -863,6 +877,14 @@ do
     end
 
     function PNL.Prototype:SetPadding(l, t, r, b)
+        if isstring(l) then
+            l, t, r, b = unpack(string.Split(l, ","))
+            l = tonumber(l)
+            t = tonumber(t)
+            r = tonumber(r)
+            b = tonumber(b)
+        end
+
         assert(l, "Left padding not specified")
         t = t or l
         r = r or l
@@ -876,6 +898,14 @@ do
     end
 
     function PNL.Prototype:SetMargin(l, t, r, b)
+        if isstring(l) then
+            l, t, r, b = unpack(string.Split(l, ","))
+            l = tonumber(l)
+            t = tonumber(t)
+            r = tonumber(r)
+            b = tonumber(b)
+        end
+
         assert(l, "Left margin not specified")
         t = t or l
         r = r or l
@@ -945,9 +975,8 @@ do
         if el then
             el:OnChildAdded(self)
             table.insert(el.Children, self)
-            el:Paint() -- Force a paint to update render bounds @debt renderbounds should be calculated elsewhere
+            el:InvalidateLayout()
         end
-        self:Paint() -- Force a paint to update render bounds @debt renderbounds should be calculated elsewhere
         return self
     end
 
@@ -976,7 +1005,7 @@ do
                 el:SetName(name)
             end
         end
-        self:InvalidateLayout(nil, nil, nil, true)
+        self:InvalidateLayout(nil, nil, true)
         return el
     end
 
@@ -990,27 +1019,30 @@ do
     function PNL.Prototype:OnChildRemoved(child)
     end
 
-    function PNL.Prototype:InvalidateLayout(immediate, force, noPropagate, noChildren)
+    function PNL.Prototype:InvalidateLayout(immediate, noPropagate, noChildren)
         if not immediate then
             local p = Promise.Create()
             debounce(0, self, function ()
-                self:InvalidateLayout(true, force, noPropagate, noChildren)
+                self:InvalidateLayout(true, noPropagate, noChildren)
                 self:DebugMessage("Layout", self.LayoutCount, force, oldWidth, oldHeight, w, h)
                 p:Complete()
             end)
             return p
         end
         
-        self:PerformLayout(force, noPropagate, noChildren)
-        self:DebugMessage("Layout", self.LayoutCount, force, oldWidth, oldHeight, w, h)
+        self:PerformLayout(noPropagate, noChildren)
+        self:DebugMessage("Layout", self.LayoutCount, oldWidth, oldHeight, w, h)
+    end
 
+    function PNL.Prototype:InvalidateParent(immediate, noPropagate, noChildren)
+        return self:GetParent():InvalidateLayout(immediate, noPropagate, noChildren)
     end
 
     function PNL.Prototype:CancelLayout()
         cancelDebounce(self)
     end
 
-    function PNL.Prototype:PerformLayout(force, noPropagate, noChildren)
+    function PNL.Prototype:PerformLayout(noPropagate, noChildren)
         self.LastLayout = CurTime()
         self.LayoutCount = self.LayoutCount + 1
 
@@ -1025,12 +1057,6 @@ do
         self:Compute("X")
         self:Compute("Y")
 
-
-        if not force and IsValid(self.Mesh) and oldWidth == w and oldHeight == h then
-            -- Don't do anything if we're exactly the same size.
-            return
-        end
-
         self:RegenerateMesh()
 
         -- If we're not a relative size, we need to propagate invalidation upwards.
@@ -1038,13 +1064,13 @@ do
             if not self:IsSizeRelative() then
                 local parent = self:GetParent()
                 if parent and parent:IsSizeDerived() then
-                    parent:InvalidateLayout(nil, true)
+                    parent:InvalidateLayout()
                 end
             else
                 -- Otherwise, propagate it downwards to relative sized children.
                 for k, v in pairs(self:GetChildren()) do
                     if v:IsSizeRelative() then
-                        v:InvalidateLayout(nil, true)
+                        v:InvalidateLayout()
                     end
                 end
             end
@@ -1373,10 +1399,6 @@ do
         end
     end
 
-    function PNL.Prototype:Flash()
-        self.LastLayout = CurTime()
-    end
-
     function PNL.Prototype:Paint()
 
         self.AbsolutePos = cam.GetModelMatrix():GetTranslation()
@@ -1409,104 +1431,114 @@ do
 
         if self:Compute("Visible") and IsValid(self.Mesh) then
 
+            -- Check to see if the render bounds are valid (they might not be if we're outside of the parent's bounds), and if not, skip rendering
+            if self.RenderBounds.w <= self.RenderBounds.x or self.RenderBounds.h <= self.RenderBounds.y then
+                return
+            end
+
             if self:GetCull() then
                 self:SetScissorRect()
             end
 
-                local m = Matrix()
-                m:Translate(Vector(self:GetMarginLeft(),  self:GetMarginTop(), 0))
+            local m = Matrix()
+            m:Translate(Vector(self:GetMarginLeft(),  self:GetMarginTop(), 0))
 
-                cam.PushModelMatrix(m, true)
-                    self:PaintMesh()
-                    self:PaintStroke()
+            cam.PushModelMatrix(m, true)
+                render.PushFilterMag(TEXFILTER.ANISOTROPIC)
+                render.PushFilterMin(TEXFILTER.ANISOTROPIC)
 
-                    self:PaintChildren()
-                cam.PopModelMatrix()
+                self:PaintMesh()
+                self:PaintStroke()
+                render.PopFilterMin()
+                render.PopFilterMag()
 
-                render.SetScissorRect(0, 0, 0, 0, false)
+                self:PaintChildren()
+            cam.PopModelMatrix()
+
+            render.SetScissorRect(0, 0, 0, 0, false)
+        
             
+            if VisualizeLayout:GetBool() then
                 
-                if VisualizeLayout:GetBool() then
-                    
-                    surface.SetAlphaMultiplier(self:GetVisible() and 1 or 0.05)
+                surface.SetAlphaMultiplier(self:GetVisible() and 1 or 0.05)
 
-                    surface.SetDrawColor(Color(128, 255, 255, 225))
+                surface.SetDrawColor(Color(128, 255, 255, 225))
+                surface.DrawOutlinedRect(
+                    0, 0,
+                    self:GetOuterWidth(),
+                    self:GetOuterHeight(),
+                    2
+                )
+                
+                -- Margin bounds
+                cam.PushModelMatrix(m, true)
+                    surface.SetDrawColor(Color(255, 255, 0, 225))
                     surface.DrawOutlinedRect(
                         0, 0,
-                        self:GetOuterWidth(),
-                        self:GetOuterHeight(),
+                        self:GetWidth(),
+                        self:GetHeight(),
                         2
                     )
-                    
-                    -- Margin bounds
+
+                    -- Inner bounds
+                    m = Matrix()
+                    m:Translate(Vector(
+                        self:GetPaddingLeft(),
+                        self:GetPaddingTop(),
+                        0
+                    ))
                     cam.PushModelMatrix(m, true)
-                        surface.SetDrawColor(Color(255, 255, 0, 225))
+                        surface.SetDrawColor(Color(255, 0, 255, 225))
                         surface.DrawOutlinedRect(
                             0, 0,
-                            self:GetWidth(),
-                            self:GetHeight(),
+                            self:GetInnerWidth(),
+                            self:GetInnerHeight(),
                             2
                         )
+                        
 
-                        -- Inner bounds
-                        m = Matrix()
-                        m:Translate(Vector(
-                            self:GetPaddingLeft(),
-                            self:GetPaddingTop(),
-                            0
-                        ))
-                        cam.PushModelMatrix(m, true)
-                            surface.SetDrawColor(Color(255, 0, 255, 225))
+                        if self.ContentWidth and self.ContentHeight then
+                            surface.SetDrawColor(Color(0, 255, 0, 100))
+                            local align = self:GetAlign()
+                            
+                            local x, y = 0, 0
+                            if isany(align, 8, 5, 2) then
+                                x = self:GetInnerWidth()/2 - self.ContentWidth/2
+                            elseif isany(align, 9, 6, 3) then
+                                x = self:GetInnerWidth() - self.ContentWidth
+                            end
+
+                            if isany(align, 4, 5, 6) then
+                                y = self:GetInnerHeight()/2 - self.ContentHeight/2
+                            elseif isany(align, 1, 2, 3) then
+                                y = self:GetInnerHeight() - self.ContentHeight
+                            end
+
                             surface.DrawOutlinedRect(
-                                0, 0,
-                                self:GetInnerWidth(),
-                                self:GetInnerHeight(),
+                                x,
+                                y,
+                                self.ContentWidth,
+                                self.ContentHeight,
                                 2
                             )
-                            
-
-                            if self.ContentWidth and self.ContentHeight then
-                                surface.SetDrawColor(Color(0, 255, 0, 100))
-                                local align = self:GetAlign()
-                                
-                                local x, y = 0, 0
-                                if isany(align, 8, 5, 2) then
-                                    x = self:GetInnerWidth()/2 - self.ContentWidth/2
-                                elseif isany(align, 9, 6, 3) then
-                                    x = self:GetInnerWidth() - self.ContentWidth
-                                end
-
-                                if isany(align, 4, 5, 6) then
-                                    y = self:GetInnerHeight()/2 - self.ContentHeight/2
-                                elseif isany(align, 1, 2, 3) then
-                                    y = self:GetInnerHeight() - self.ContentHeight
-                                end
-
-                                surface.DrawOutlinedRect(
-                                    x,
-                                    y,
-                                    self.ContentWidth,
-                                    self.ContentHeight,
-                                    2
-                                )
-                            end
-                        cam.PopModelMatrix()
+                        end
                     cam.PopModelMatrix()
+                cam.PopModelMatrix()
 
-                    
-                    surface.SetAlphaMultiplier(1)
-                    if CurTime() - self.LastLayout < 0.5 then
-                        local elapsed = CurTime() - self.LastLayout
-                        local alpha = math.Clamp(1 - (elapsed * 2), 0, 1) * 255
+                
+                surface.SetAlphaMultiplier(1)
+                if CurTime() - self.LastLayout < 0.5 then
+                    local elapsed = CurTime() - self.LastLayout
+                    local alpha = math.Clamp(1 - (elapsed * 2), 0, 1) * 255
 
-                        surface.SetDrawColor(Color(255, 255, 0, alpha))
-                        surface.DrawOutlinedRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight(), 2)
-                        surface.SetDrawColor(Color(255, 0, 0, alpha))
-                        surface.DrawRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight())
-                    end
+                    surface.SetDrawColor(Color(255, 255, 0, alpha))
+                    surface.DrawOutlinedRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight(), 2)
+                    surface.SetDrawColor(Color(255, 0, 0, alpha))
+                    surface.DrawRect(0, 0, self:GetOuterWidth(), self:GetOuterHeight())
                 end
-            surface.SetAlphaMultiplier(alpha)
+            end
         end
+        surface.SetAlphaMultiplier(alpha)
     end
 
     function PNL.Prototype:PaintMesh()
@@ -1606,13 +1638,44 @@ do
         return self.RenderBounds.x, self.RenderBounds.y, self.RenderBounds.w, self.RenderBounds.h
     end
 
-    function PNL.Prototype:Find(key, name, single, noRecurse, out)
+    function PNL.Prototype:Find(key, name, skipCache)
         if isstring(key) and not isstring(name) then
             name = key
             key = "Name"
         end
+        key = key or "Name"
+
         assert(isstring(key), "Find: Key must be a string")
         assert(name, "Find: Name must be specified")
+
+        local tuple = key .. ":" .. name
+        local cache = self.FindCache[tuple]
+        if cache and not skipCache then
+            return cache
+        end
+
+        for k, v in pairs(self.Children) do
+            if v[key] == name then
+                self.FindCache[tuple] = v
+                return v
+            end
+
+            local found = v:Find(key, name)
+            if found then
+                self.FindCache[tuple] = found
+                return found
+            end
+        end
+        return nil
+    end
+    
+    function PNL.Prototype:FindAll(key, name, noRecurse, out)
+        if isstring(key) and not isstring(name) then
+            name = key
+            key = "Name"
+        end
+        assert(isstring(key), "FindAll: Key must be a string")
+        assert(name, "FindAll: Name must be specified")
 
         out = out or {}
         for k, v in pairs(self.Children) do
@@ -1624,7 +1687,7 @@ do
             end
 
             if not noRecurse then
-                local found = v:Find(key, name, single, noRecurse, out)
+                local found = v:FindAll(key, name, single, noRecurse, out)
                 if single and #found > 0 then
                     return found[1]
                 end
@@ -1633,7 +1696,7 @@ do
         return out
     end
 
-    function PNL.Prototype:FindParent(name)
+    function PNL.Prototype:FindParent(name, skipCache)
         if isstring(key) and not isstring(name) then
             name = key
             key = "Name"
@@ -1641,9 +1704,16 @@ do
         assert(isstring(key), "Find: Key must be a string")
         assert(name, "Find: Name must be specified")
 
+        local tuple = "Parent:" .. key .. ":" .. name
+        local cache = self.FindCache[tuple]
+        if cache and not skipCache then
+            return cache
+        end
+
         local p = self:GetParent()
         while p do
             if p[key] == name then
+                self.FindCache[tuple] = p
                 return p
             end
             p = p:GetParent()
@@ -1915,6 +1985,13 @@ do
         end
     end
 
+    function PNL.Prototype:OnKeyCodePressed(key)
+        local p = self:GetParent()
+        if p then
+            p:OnKeyCodePressed(key, self)
+        end
+    end
+
     function PNL.Prototype:Think()
         -- Handle animations first.
         for k, v in pairs(self.Animations) do
@@ -1963,6 +2040,10 @@ do
         for k, v in pairs(self.Children) do
             v:Think()
         end
+    end
+
+    function PNL.Prototype:RequestFocus()
+        self:GetHost():SetFocus(self)
     end
 
     function PNL.Prototype:OnDisposed()
@@ -2116,7 +2197,7 @@ do
             local p = pnl
             while p do
                 if p:Compute("Focusable") then
-                    self:SetFocus(p)                    
+                    self:SetFocus(p)
                     return
                 end
                 p = p:GetParent()
@@ -2242,9 +2323,7 @@ do
 
     function Interface.VGUI:OnKeyCodePressed(key)
         local focused = Interface.BasePanel:GetFocusedPanel()
-        if focused and focused.OnKeyCodePressed then
-            focused:OnKeyCodePressed(key)
-        end
+        focused:OnKeyCodePressed(key)
         return true
     end
 
@@ -2356,6 +2435,10 @@ do
         if namespace == "Computed" then
             self:SetComputed(key, SmartCompileString(value, self, key))
             return false
+        elseif namespace == "Init" then
+            local f = SmartCompileString(value, self, key)
+            print(f(self))
+            return true, f(self)
         elseif isany(namespace, "Func", "Function") then
             local func = SmartCompileString(value, self, key)
             if not isfunction(func) then
@@ -2364,6 +2447,8 @@ do
 
             self[key] = func
             return false
+        elseif isany(namespace, "Param", "Parameter") then
+            return false -- Only used by function calls
         end
 
         local typ = Type.GetByName(namespace)
@@ -2373,8 +2458,14 @@ do
         end
     end)
         
-    function Interface.CreateFromNode(parent, node)    
-        local pnl = Interface.Create(node.Tag, parent)
+    function Interface.CreateFromNode(parent, node)
+
+        local pnl = hook.Run("Interface.CreateFromNode", parent, node)
+        if pnl == true then
+            return -- If
+        elseif not pnl then
+            pnl = Interface.Create(node.Tag, parent)
+        end
 
         if node.Attributes then
             ApplyProperties(pnl, node)
@@ -2386,6 +2477,85 @@ do
 
         return pnl
     end
+
+    hook.Add("Interface.CreateFromNode", function (parent, node)
+        if string.StartsWith(node.Tag, ":") then
+            local funcName = string.sub(node.Tag, 2)
+            local func = parent[funcName]
+
+            if not func then
+                func = parent.Find
+
+                node.Attributes = node.Attributes or {}
+                table.insert(node.AttributesdWAbou, { Name = "Param:Name", Value = funcName })
+            end
+            
+            local args = {}
+
+            -- Create a map of the parameters
+            local params = {}
+            for i=2, debug.getinfo(func, "u").nparams do
+                local p = debug.getlocal(func, i)
+                params[string.lower(p)] = i - 1
+            end
+
+            -- And now parse the attributes, matching them to parameters.
+            local attr = {}
+            if node.Attributes then
+                for k, v in pairs(node.Attributes) do
+                    local param, namespace, key = unpack(string.Split(v.Name, ":"))
+                    if param ~= "Param" then
+                        continue
+                    end
+
+                    if not key then
+                        key = namespace
+                        namespace = nil
+                    end
+
+                    local idx = params[string.lower(key)]
+                    if not idx then 
+                        continue
+                    end
+
+                    local value = v.Value
+                    if namespace then
+                        if namespace == "Lua" then
+                            local parsedFunc = CompileString(value, string.format("%s.%s", parent:GetType():GetName(), key), true)
+                            value = parsedFunc()
+                        elseif isany(namespace, "Func", "Function") then
+                            local parsedFunc = CompileString(value, string.format("%s.%s", parent:GetType():GetName(), key), true)
+                            value = parsedFunc
+                        else
+                            local t = Type.GetByName(namespace)
+                            assert(t, string.format("No type '%s' found for XML attribute '%s'", namespace, v.Name))
+                            value = t:Parse(v.Value)
+                        end
+                    else
+                        -- Otherwise try to infer it
+                        local lowerValue = string.lower(value)
+                        if isany(lowerValue, "true", "false") then
+                            value = lowerValue == "true"
+                        else
+                            local tn = tonumber(value)
+                            if tn then
+                                value = tn
+                            end
+                        end
+                    end
+
+                    args[idx] = value
+                end
+            end
+
+            local el = func(parent, args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10])
+            return Type.Is(el, "Panel") and el or true
+        elseif node.Tag == "Lua" then
+            print("<Lua>")
+            PrintTable(node)
+            return true
+        end
+    end)
 
     function Interface.CreateFromXML(parent, xml)
         assert(xml, "XML string cannot be nil")

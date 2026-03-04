@@ -52,6 +52,17 @@ function TEXTBOX.Prototype:SetNumeric(val)
     return self
 end
 
+function TEXTBOX.Prototype:GetTextSize()
+    surface.SetFont(self:GetFont())
+    local val = self:GetProperty("Value")
+    if stringex.IsBlank(val) then
+        val = self:Compute("Placeholder")
+    end
+
+    local x, y = surface.GetTextSize(val)
+    return x + ScreenScale(3), y
+end
+
 function TEXTBOX.Prototype:TextEntryGetFocus()
     
     local intf = self.Interface

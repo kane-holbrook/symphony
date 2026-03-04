@@ -120,8 +120,8 @@ do
                 self:SetX(0)
                 self:SetY(0)
             end
-            self:InvalidateLayout(true, true)
-            self:GetParent():InvalidateLayout(true, true)
+            self:InvalidateLayout(true)
+            self:GetParent():InvalidateLayout(true)
         end
 
         if self:Compute("Visible") then

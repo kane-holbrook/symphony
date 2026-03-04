@@ -155,9 +155,17 @@ function debounce(time, identifier, func, ...)
     end
 
     identifier = identifier or currentfile(1)
+    if debouncers[identifier] then return end
+
     debouncers[identifier] = debouncers[identifier] or true
     local args = {...}
     timer.Simple(time, function ()
+        if not debouncers[identifier] then return end
+        if istable(identifier) and identifier.IsValid and not IsValid(identifier) then
+            debouncers[identifier] = nil
+            return
+        end
+
         debouncers[identifier] = nil
         func(unpack(args))
     end)

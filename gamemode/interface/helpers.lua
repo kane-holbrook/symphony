@@ -83,7 +83,7 @@ do
     end
 
     local Radial = Material("sstrp25/shaders/radialgradient")
-    function RadialGradient(color1, offset1, color2, offset2, color3)
+    function RadialGradient(color1, offset1, color2, offset2, color3, tint)
         if not offset1 then
             offset1 = 0.25
             color2 = color1
@@ -97,20 +97,27 @@ do
         return function (w, h) 
 
             local alpha = surface.GetAlphaMultiplier()
+            local basecolor = Vector(1, 1, 1)
+            if isfunction(tint) then
+                local rgb = tint()
+                basecolor.x = rgb.r / 255
+                basecolor.y = rgb.g / 255
+                basecolor.z = rgb.b / 255
+            end
 
-            Radial:SetFloat("$c0_x", math.Round(color1.r / 255, dp))
-            Radial:SetFloat("$c0_y", math.Round(color1.g / 255, dp))
-            Radial:SetFloat("$c0_z", math.Round(color1.b / 255, dp))
+            Radial:SetFloat("$c0_x", math.Round((color1.r / 255) * basecolor.x, dp))
+            Radial:SetFloat("$c0_y", math.Round((color1.g / 255) * basecolor.y, dp))
+            Radial:SetFloat("$c0_z", math.Round((color1.b / 255) * basecolor.z, dp))
             Radial:SetFloat("$c0_w", math.Round((color1.a / 255) * alpha, dp))
             
-            Radial:SetFloat("$c1_x", math.Round(color2.r / 255, dp))
-            Radial:SetFloat("$c1_y", math.Round(color2.g / 255, dp))
-            Radial:SetFloat("$c1_z", math.Round(color2.b / 255, dp))
+            Radial:SetFloat("$c1_x", math.Round((color2.r / 255) * basecolor.x, dp))
+            Radial:SetFloat("$c1_y", math.Round((color2.g / 255) * basecolor.y, dp))
+            Radial:SetFloat("$c1_z", math.Round((color2.b / 255) * basecolor.z, dp))
             Radial:SetFloat("$c1_w", math.Round((color2.a / 255) * alpha, dp))
 
-            Radial:SetFloat("$c2_x", math.Round(color3.r / 255, dp))
-            Radial:SetFloat("$c2_y", math.Round(color3.g / 255, dp))
-            Radial:SetFloat("$c2_z", math.Round(color3.b / 255, dp))
+            Radial:SetFloat("$c2_x", math.Round((color3.r / 255) * basecolor.x, dp))
+            Radial:SetFloat("$c2_y", math.Round((color3.g / 255) * basecolor.y, dp))
+            Radial:SetFloat("$c2_z", math.Round((color3.b / 255) * basecolor.z, dp))
             Radial:SetFloat("$c2_w", math.Round((color3.a / 255) * alpha, dp))
             
             Radial:SetFloat("$c3_x", math.Round(offset1, dp))
@@ -121,7 +128,7 @@ do
     end
 
     local mat = Material("sstrp25/shaders/lineargradientv2")
-    function LinearGradient(col1, off1, col3, rotDeg)
+    function LinearGradient(col1, off1, col3, rotDeg, tint)
         
         local colA = col1
         local colB = col3 or colA
@@ -133,7 +140,15 @@ do
 
         local rad = math.rad((rotDeg or 0) + LG_OFFSET)
 
-        return function (w, h)
+        return function (w, h)            
+            local basecolor = Vector(1, 1, 1)
+            if isfunction(tint) then
+                local rgb = tint()
+                basecolor.x = rgb.r / 255
+                basecolor.y = rgb.g / 255
+                basecolor.z = rgb.b / 255
+            end
+
             -- aspect-correct the direction in UV space
             local ax = w / math.max(h, 1)
             local dx, dy = math.Round(math.cos(rad), 2), math.Round(math.sin(rad), 2)
@@ -142,13 +157,13 @@ do
 
             -- colours
             local alpha = surface.GetAlphaMultiplier()
-            mat:SetFloat("$c0_x", colA.r/255) 
-            mat:SetFloat("$c0_y", colA.g/255)
-            mat:SetFloat("$c0_z", colA.b/255) 
+            mat:SetFloat("$c0_x", (colA.r/255) * basecolor.x)
+            mat:SetFloat("$c0_y", (colA.g/255) * basecolor.y)
+            mat:SetFloat("$c0_z", (colA.b/255) * basecolor.z)
             mat:SetFloat("$c0_w", (colA.a/255) * alpha)
-            mat:SetFloat("$c1_x", colB.r/255) 
-            mat:SetFloat("$c1_y", colB.g/255)
-            mat:SetFloat("$c1_z", colB.b/255) 
+            mat:SetFloat("$c1_x", (colB.r/255) * basecolor.x)
+            mat:SetFloat("$c1_y", (colB.g/255) * basecolor.y)
+            mat:SetFloat("$c1_z", (colB.b/255) * basecolor.z)
             mat:SetFloat("$c1_w", (colB.a/255) * alpha)
 
             -- pack direction (xy); the shader ignores z/w now

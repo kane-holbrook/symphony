@@ -204,7 +204,7 @@ do
                 self:PreOpen()
 
                 self:SetVisible(true)
-                self:InvalidateLayout(true, true)
+                self:InvalidateLayout(true)
                 table.insert(self:GetHost().Overlays, self)
                 table.insert(self:GetHost():GetChildren(), self)
                 
